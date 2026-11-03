@@ -47,6 +47,7 @@ export interface TruckingOption {
   price: Money;
   currency: string;
   weight_class: string | null;
+  applies_to: "both" | "import" | "export";
   trips: number;
   total: Money;
   total_usd: Money | null;
@@ -79,6 +80,7 @@ export interface TruckingResult extends SearchBase {
   mode: "trucking";
   weight_t: string | null;
   weight_class: string | null;
+  direction: "import" | "export" | null;
   trips: number;
   options: TruckingOption[];
 }
@@ -156,6 +158,8 @@ export const api = {
   freight: (p: {
     origin: string; destination: string; equipment: string; on?: string; containers?: number; weight_t?: string;
   }) => get<FreightResult | DoorResult>("search/freight", p),
-  trucking: (p: { port: string; zone: string; equipment: string; on?: string; weight_t?: string; trips?: number }) =>
+  trucking: (p: {
+    port: string; zone: string; equipment: string; on?: string; weight_t?: string; trips?: number; direction?: string;
+  }) =>
     get<TruckingResult>("search/trucking", p),
 };

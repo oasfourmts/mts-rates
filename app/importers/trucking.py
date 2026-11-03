@@ -40,6 +40,7 @@ class TruckingRate:
     weight_class: str | None
     price: Decimal
     row_ref: str
+    applies_to: str = "both"     # "import" / "export" when the cell gives one price per direction
 
 
 @dataclass
@@ -73,6 +74,34 @@ def parse_header(header: list[str], issues: list[Issue]) -> list[Column]:
             continue
         columns.append(Column(i, cell, targets))
     return columns
+
+
+_NUM = r"(\d[\d,]*(?:\.\d+)?)"
+_IMP, _EXP = r"IMP(?:ORT)?", r"EXP(?:ORT)?"
+# "15500 IMP-16000 EXP", "15500 IMP / 16000 EXP", "IMP 15500 - EXP 16000", in either order.
+_DUAL = [
+    re.compile(rf"^{_NUM}\s*(?P<a>{_IMP}|{_EXP})\s*[-/,;|]?\s*{_NUM}\s*(?P<b>{_IMP}|{_EXP})$", re.I),
+    re.compile(rf"^(?P<a>{_IMP}|{_EXP})\s*:?\s*{_NUM}\s*[-/,;|]?\s*(?P<b>{_IMP}|{_EXP})\s*:?\s*{_NUM}$", re.I),
+]
+
+
+def parse_directional(cell: str) -> dict[str, Decimal] | None:
+    """{"import": 15500, "export": 16000} for a cell naming both directions; None if it does not."""
+    text = clean(cell)
+    for pattern in _DUAL:
+        m = pattern.match(text)
+        if not m:
+            continue
+        nums = [g for g in m.groups() if g and g[0].isdigit()]
+        labels = [m.group("a").upper()[:3], m.group("b").upper()[:3]]
+        if sorted(labels) != ["EXP", "IMP"]:
+            return None          # "IMP ... IMP": not something to guess at
+        out = {}
+        for label, num in zip(labels, nums):
+            value = parse_number(num)
+            out["import" if label == "IMP" else "export"] = value
+        return out
+    return None
 
 
 def _group_end(cell: str) -> int | None:
@@ -136,18 +165,21 @@ def parse(text: str, port_code: str | None = None) -> Result:
             if is_blank(raw):
                 continue
             try:
-                price = parse_number(raw)
+                prices = {"both": parse_number(raw)}
             except ValueError:
-                result.issues.append(Issue(ref, "skipped", "price is not a number", raw))
+                prices = parse_directional(raw)
+                if prices is None:
+                    result.issues.append(Issue(ref, "skipped", "price is not a number", raw))
+                    continue
+            if prices.get("both", 0) is None:
                 continue
-            if price is None:
-                continue
-            if price <= 0:
+            if any(p <= 0 for p in prices.values()):
                 result.issues.append(Issue(ref, "skipped", "price is 0 or less", raw))
                 continue
-            for equipment, weight in col.targets:
-                result.rows.append(TruckingRate(port_code, zone, display_name(col.trucker), match_key(col.trucker),
-                                                equipment, weight, price, ref))
+            for applies_to, price in prices.items():
+                for equipment, weight in col.targets:
+                    result.rows.append(TruckingRate(port_code, zone, display_name(col.trucker), match_key(col.trucker),
+                                                    equipment, weight, price, ref, applies_to))
     return result
 
 
@@ -169,9 +201,9 @@ def to_sql(result: Result, *, source_ref: str, valid_from: date, valid_to: date,
                         rate_type="tariff", valid_from=valid_from, valid_to=valid_to, currency="EGP",
                         status=status, source_ref=source_ref)
         s.add("INSERT INTO transport_rates (rate_card_id, origin_id, destination_id, equipment_code, weight_class, "
-              f"price, basis, source_row) VALUES ({sqlout.card(ck)}, {sqlout.loc(rate.port_code)}, "
+              f"price, basis, applies_to, source_row) VALUES ({sqlout.card(ck)}, {sqlout.loc(rate.port_code)}, "
               f"{sqlout.loc(zone_code(rate.zone_name))}, {sqlout.lit(rate.equipment)}, {sqlout.lit(rate.weight_class)}, "
-              f"{rate.price}, 'per_trip', {sqlout.lit(rate.row_ref)});")
+              f"{rate.price}, 'per_trip', {sqlout.lit(rate.applies_to)}, {sqlout.lit(rate.row_ref)});")
     for issue in result.issues:
         s.issue(issue.row_ref, issue.severity, issue.message, issue.raw)
     priced_cells = len({r.row_ref for r in result.rows})

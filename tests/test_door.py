@@ -57,3 +57,27 @@ def test_no_freight_from_any_port_says_which_ports_were_tried(client):
 def test_port_origin_still_prices_port_to_port(client):
     body = client.get("/api/search/freight", params={**LANE, "origin": "EGPSE"}).json()
     assert body["mode"] == "freight" and body["options"][0]["carrier"] == "Maersk"
+
+
+def test_direction_prices(client, db):
+    """Runs last: makes Ebad El Rahman's Alexandria -> 10th of Ramadan 40HC price import-only (15,500) and adds an
+    export price (17,500), as a "15500 IMP-17500 EXP" cell would."""
+    psql(db, "UPDATE transport_rates tr SET applies_to = 'import' FROM rate_cards rc, partners p "
+             "WHERE rc.id = tr.rate_card_id AND p.id = rc.partner_id AND p.name = 'Ebad El Rahman' "
+             "AND tr.equipment_code = '40HC' AND tr.origin_id = find_location('EGALY') "
+             "AND tr.destination_id = find_location('10th of Ramadan')")
+    psql(db, "INSERT INTO transport_rates (rate_card_id, origin_id, destination_id, equipment_code, price, applies_to) "
+             "SELECT rate_card_id, origin_id, destination_id, equipment_code, 17500, 'export' FROM transport_rates "
+             "WHERE applies_to = 'import'")
+    p = {"port": "EGALY", "zone": "10th of Ramadan", "equipment": "40HC", "on": NOV}
+    imp = client.get("/api/search/trucking", params={**p, "direction": "import"}).json()["options"]
+    exp = client.get("/api/search/trucking", params={**p, "direction": "export"}).json()["options"]
+    every = client.get("/api/search/trucking", params=p).json()["options"]
+    assert (imp[0]["trucker"], imp[0]["price"], imp[0]["applies_to"]) == ("Ebad El Rahman", "15500.00", "import")
+    assert exp[0]["price"] == "16000.00" and all(o["applies_to"] != "import" for o in exp)
+    assert any(o["applies_to"] == "export" and o["price"] == "17500.00" for o in exp)
+    assert {o["applies_to"] for o in every} == {"both", "import", "export"}
+    # Door to port is an export pickup: Alexandria now uses 16,000, not the import-only 15,500.
+    door = client.get("/api/search/freight", params={**LANE, "via": "EGALY"}).json()["options"][0]
+    assert door["trucking"]["price"] == "16000.00" and door["trucking"]["applies_to"] == "both"
+    assert client.get("/api/search/trucking", params={**p, "direction": "sideways"}).status_code == 422

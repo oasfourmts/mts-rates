@@ -29,15 +29,28 @@ def test_trucking_refs_name_the_sheet_row():
     assert first.row_ref.startswith("row 4 (6th of October)")      # data starts on sheet row 4
 
 
-def test_trucking_import_export_cell_is_not_guessed():
+def test_trucking_import_export_cell_gives_one_price_per_direction():
     rows = trucking_live("trucking_alexandria")
     zone = next(i for i, r in enumerate(rows) if r and r[0] == "10th of Ramadan")
     rows[zone] = rows[zone] + [""] * (7 - len(rows[zone]))
-    rows[zone][6] = "15500 IMP-16000 EXP"           # as on the live sheet, 20'DC heavy / MTS
+    rows[zone][6] = "15500 IMP-16000 EXP"           # as on the live sheet, 20'DC heavy & 40'HC / MTS
     res = trucking.parse(to_text(rows))
-    assert any(i.raw == "15500 IMP-16000 EXP" and i.severity == "skipped" for i in res.issues)
-    assert not any(r.zone_name == "10th of Ramadan" and r.trucker_key == "MTS" and r.weight_class == "heavy"
-               for r in res.rows)
+    got = sorted((r.equipment, r.weight_class, r.applies_to, r.price) for r in res.rows
+                 if r.zone_name == "10th of Ramadan" and r.trucker_key == "MTS" and r.row_ref.endswith("(MTS)")
+                 and "col 7" in r.row_ref)
+    assert got == [("20DV", "heavy", "export", 16000), ("20DV", "heavy", "import", 15500),
+                   ("40HC", None, "export", 16000), ("40HC", None, "import", 15500)]
+    assert not any(i.raw == "15500 IMP-16000 EXP" for i in res.issues)
+
+
+@pytest.mark.parametrize("cell", ["15500 IMP-15800 IMP", "15500-16000", "about 15000", "15500 IMP"])
+def test_unclear_cells_are_issues_not_guesses(cell):
+    rows = trucking_live("trucking_alexandria")
+    zone = next(i for i, r in enumerate(rows) if r and r[0] == "10th of Ramadan")
+    rows[zone] = rows[zone] + [""] * (7 - len(rows[zone]))
+    rows[zone][6] = cell
+    res = trucking.parse(to_text(rows))
+    assert any(i.raw == cell and i.severity == "skipped" for i in res.issues)
 
 
 def test_freight_live_layout_matches_fixture():

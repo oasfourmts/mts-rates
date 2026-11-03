@@ -23,6 +23,7 @@ interface Form {
   count: string;
   weight: string;
   on: string;
+  direction: "import" | "export";
 }
 
 function readUrl(): Form {
@@ -35,12 +36,14 @@ function readUrl(): Form {
     count: p.get("count") ?? "1",
     weight: p.get("weight") ?? "",
     on: p.get("on") ?? cairoToday(),
+    direction: p.get("direction") === "export" ? "export" : "import",
   };
 }
 
 function writeUrl(f: Form) {
   const p = new URLSearchParams({ mode: f.mode, from: f.from, to: f.to, equipment: f.equipment, count: f.count, on: f.on });
   if (f.equipment === "20DV" && f.weight) p.set("weight", f.weight);
+  if (f.mode === "trucking") p.set("direction", f.direction);
   history.replaceState(null, "", `?${p}`);
 }
 
@@ -114,7 +117,7 @@ function RateSearch() {
             })
           : await api.trucking({
               port: f.from, zone: f.to, equipment: f.equipment, on: f.on, trips: count,
-              weight_t: f.equipment === "20DV" ? f.weight : undefined,
+              weight_t: f.equipment === "20DV" ? f.weight : undefined, direction: f.direction,
             }),
       );
     } catch (e) {
@@ -187,6 +190,15 @@ function RateSearch() {
           </div>
 
           <div className="cargo">
+            {trucking && (
+              <label>
+                <span>Move</span>
+                <select value={form.direction} onChange={(e) => set("direction", e.target.value as Form["direction"])}>
+                  <option value="import">Import delivery</option>
+                  <option value="export">Export pickup</option>
+                </select>
+              </label>
+            )}
             <label>
               <span>Equipment</span>
               <select value={form.equipment} onChange={(e) => set("equipment", e.target.value)}>
@@ -419,6 +431,7 @@ function TruckingTable({ r }: { r: TruckingResult }) {
               <tr key={o.transport_rate_id} className={i === 0 && !showClass ? "best" : undefined}>
                 <th scope="row">
                   {o.trucker}
+                  {o.applies_to !== "both" && <small>{o.applies_to === "import" ? "Import price" : "Export price"}</small>}
                   {i === 0 && !showClass && <small className="tag">Cheapest</small>}
                 </th>
                 {showClass && <td>{o.weight_class}</td>}
@@ -431,7 +444,11 @@ function TruckingTable({ r }: { r: TruckingResult }) {
           </tbody>
         </table>
       </div>
-      <p className="fx">Buy prices, one-way trip from the port.</p>
+      <p className="fx">
+        Buy prices, one-way trip{" "}
+        {r.direction === "export" ? `from ${r.destination.name} to the port` : `from the port to ${r.destination.name}`}.
+        Where the sheet gives separate import and export prices, only the {r.direction ?? "matching"} price is shown.
+      </p>
       <FxNote r={r} />
     </>
   );
@@ -543,7 +560,11 @@ function DoorRow({ o, best, multi, open, toggle }: {
         {multi && <td className="num">{money(o.per_container_usd)}</td>}
         <td className="num">
           {moneyIn(t.total, t.currency)} {t.currency}
-          <small>{t.trucker}{o.other_truckers > 0 && `, cheapest of ${o.other_truckers + 1}`}</small>
+          <small>
+            {t.trucker}
+            {t.applies_to === "export" && ", export price"}
+            {o.other_truckers > 0 && `, cheapest of ${o.other_truckers + 1}`}
+          </small>
         </td>
         <td className="num">
           {f.total_usd !== null ? money(f.total_usd) : <span className="warn">Needs {f.missing_fx.join(", ")} rate</span>}

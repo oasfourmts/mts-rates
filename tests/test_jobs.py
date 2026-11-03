@@ -27,7 +27,8 @@ def fresh():
 
 def test_migrate_runs_once_and_refuses_edited_files(fresh, tmp_path):
     name, conn = fresh
-    assert migrate.apply(conn, log=lambda *_: None) == ["0001_initial.sql", "0002_fx_entry.sql"]
+    assert migrate.apply(conn, log=lambda *_: None) == ["0001_initial.sql", "0002_fx_entry.sql",
+                                                       "0003_trucking_direction.sql"]
     assert migrate.apply(conn, log=lambda *_: None) == []
     assert psql(name, "SELECT count(*) FROM search_freight('EGALY', 'ITGOA', '20DV')") == "0"   # functions exist
     root = tmp_path / "db"

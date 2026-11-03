@@ -104,8 +104,10 @@ def create_app(settings: config.Settings | None = None, verify_iap=_verify_iap) 
 
     @app.get("/api/search/trucking")
     def search_trucking(user: Me, c: Conn, port: str, zone: str, equipment: str, on: date | None = None,
-                        weight_t: Decimal | None = Query(None, gt=0, le=60), trips: int = Query(1, ge=1, le=500)):
-        return run(search.search_trucking, c, port, zone, equipment, on or today(), weight_t, trips)
+                        weight_t: Decimal | None = Query(None, gt=0, le=60), trips: int = Query(1, ge=1, le=500),
+                        direction: str | None = Query(None, pattern="^(import|export)$")):
+        """direction: import (delivery port -> zone) or export (pickup zone -> port); empty lists every price."""
+        return run(search.search_trucking, c, port, zone, equipment, on or today(), weight_t, trips, direction)
 
     @app.get("/api/rate-cards/expiring")
     def expiring(user: Me, c: Conn, days: int = Query(7, ge=0, le=90), on: date | None = None):

@@ -125,8 +125,15 @@ def search_freight(conn: Connection, origin: str, destination: str, equipment: s
             "containers": containers, "fx": _fx_out(fx), "options": options}
 
 
+DIRECTIONS = ("import", "export")
+
+
 def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: date,
-                    weight_t: Decimal | None = None, trips: int = 1) -> dict:
+                    weight_t: Decimal | None = None, trips: int = 1, direction: str | None = None) -> dict:
+    """direction "import": delivery port -> zone; "export": pickup zone -> port. Where the sheet gave one price
+    per direction, only that direction's price is used; a single price applies both ways."""
+    if direction is not None and direction not in DIRECTIONS:
+        raise SearchError("Direction must be import or export")
     if trips < 1:
         raise SearchError("Number of trips must be at least 1")
     if weight_t is not None and weight_t <= 0:
@@ -135,8 +142,8 @@ def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: 
     z = resolve_location(conn, zone, "inland destination")
     equipment = check_equipment(conn, equipment)
     wc = weight_class(equipment, weight_t)
-    rows = conn.execute(text("SELECT * FROM search_trucking(:p, :z, :e, :w, :on)"),
-                        {"p": p.code, "z": z.code, "e": equipment, "w": wc, "on": on}).mappings().all()
+    rows = conn.execute(text("SELECT * FROM search_trucking(:p, :z, :e, :w, :on, :d)"),
+                        {"p": p.code, "z": z.code, "e": equipment, "w": wc, "on": on, "d": direction}).mappings().all()
     fx = latest_fx(conn, {r["currency"].strip() for r in rows}, on)
     options = []
     for r in rows:
@@ -145,12 +152,14 @@ def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: 
         days = _days_left(r["valid_to"], on)
         options.append({
             "rate_card_id": r["rate_card_id"], "transport_rate_id": r["transport_rate_id"], "trucker": r["trucker"],
-            "price": r["price"], "currency": cur, "weight_class": r["weight_class"], "trips": trips,
+            "price": r["price"], "currency": cur, "weight_class": r["weight_class"], "applies_to": r["applies_to"],
+            "trips": trips,
             "total": total, "total_usd": to_usd(total, cur, fx), "valid_to": r["valid_to"], "days_left": days,
             "expiring_soon": days <= EXPIRY_WARNING_DAYS,
         })
     return {"mode": "trucking", "on": on, "origin": _loc(p), "destination": _loc(z), "equipment": equipment,
-            "weight_t": weight_t, "weight_class": wc, "trips": trips, "fx": _fx_out(fx), "options": options}
+            "weight_t": weight_t, "weight_class": wc, "direction": direction, "trips": trips, "fx": _fx_out(fx),
+            "options": options}
 
 
 def search_lane(conn: Connection, origin: str, destination: str, equipment: str, on: date, containers: int = 1,
@@ -174,7 +183,8 @@ def search_door(conn: Connection, zone: str, destination: str, equipment: str, o
     ports = conn.execute(text(
         "SELECT DISTINCT l.code, l.name FROM transport_rates tr "
         "JOIN rate_cards rc ON rc.id = tr.rate_card_id JOIN locations l ON l.id = tr.origin_id "
-        "WHERE tr.destination_id = :z AND tr.equipment_code = :e AND rc.status = 'active' "
+        "WHERE tr.destination_id = :z AND tr.equipment_code = :e AND tr.applies_to IN ('both', 'export') "
+        "  AND rc.status = 'active' "
         "  AND :on BETWEEN rc.valid_from AND rc.valid_to AND (CAST(:via AS bigint) IS NULL OR l.id = :via) "
         "ORDER BY l.code"),
         {"z": z.id, "e": equipment, "on": on, "via": via_loc.id if via_loc else None}).all()
@@ -185,7 +195,8 @@ def search_door(conn: Connection, zone: str, destination: str, equipment: str, o
         if not freight["options"]:
             no_freight.append({"code": port.code, "name": port.name})
             continue
-        truck = search_trucking(conn, port.code, z.code, equipment, on, weight_t, trips=containers)
+        truck = search_trucking(conn, port.code, z.code, equipment, on, weight_t, trips=containers,
+                                direction="export")   # pickup leg: zone -> port
         if not truck["options"]:   # e.g. the only prices are for the other weight class
             no_freight.append({"code": port.code, "name": port.name})
             continue
