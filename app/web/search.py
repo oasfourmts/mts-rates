@@ -3,7 +3,12 @@
 The SQL function prices ONE container; here we price the booking the user asked for: per-container and
 per-trip charges times the number of boxes, per-B/L and per-shipment charges once. FX follows to_usd() exactly:
 the latest rate on or before the search date, each charge rounded to cents, and no total at all when a
-currency has no rate (a quote must never be built on a missing exchange rate)."""
+currency has no rate (a quote must never be built on a missing exchange rate).
+
+Door to port (export from a factory): the origin is an inland zone. Every Egyptian port with an active trucking
+price for that zone is tried, and each freight option from that port is combined with the cheapest trucker.
+The legacy sheet prices port -> zone; MTS confirmed on 3 Nov 2026 that the same price applies to the pickup
+leg zone -> port, so trucking_rates are looked up port -> zone for both directions."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -146,6 +151,66 @@ def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: 
         })
     return {"mode": "trucking", "on": on, "origin": _loc(p), "destination": _loc(z), "equipment": equipment,
             "weight_t": weight_t, "weight_class": wc, "trips": trips, "fx": _fx_out(fx), "options": options}
+
+
+def search_lane(conn: Connection, origin: str, destination: str, equipment: str, on: date, containers: int = 1,
+                weight_t: Decimal | None = None, via: str | None = None) -> dict:
+    """Rate Search entry point: a port origin prices port to port; an inland zone prices door to port."""
+    if resolve_location(conn, origin, "origin").kind == "inland_zone":
+        return search_door(conn, origin, destination, equipment, on, containers, weight_t, via)
+    return search_freight(conn, origin, destination, equipment, on, containers)
+
+
+def search_door(conn: Connection, zone: str, destination: str, equipment: str, on: date, containers: int = 1,
+                weight_t: Decimal | None = None, via: str | None = None) -> dict:
+    z = resolve_location(conn, zone, "origin")
+    if z.kind != "inland_zone":
+        raise SearchError(f"{z.name} is not an inland pickup zone")
+    pod = resolve_location(conn, destination, "destination")
+    equipment = check_equipment(conn, equipment)
+    if equipment == "20DV" and weight_t is None:
+        raise SearchError("Enter the cargo weight: 20DV trucking is priced by weight (light is under 8 t).")
+    via_loc = resolve_location(conn, via, "port") if via else None
+    ports = conn.execute(text(
+        "SELECT DISTINCT l.code, l.name FROM transport_rates tr "
+        "JOIN rate_cards rc ON rc.id = tr.rate_card_id JOIN locations l ON l.id = tr.origin_id "
+        "WHERE tr.destination_id = :z AND tr.equipment_code = :e AND rc.status = 'active' "
+        "  AND :on BETWEEN rc.valid_from AND rc.valid_to AND (CAST(:via AS bigint) IS NULL OR l.id = :via) "
+        "ORDER BY l.code"),
+        {"z": z.id, "e": equipment, "on": on, "via": via_loc.id if via_loc else None}).all()
+
+    options, fx, no_freight, wc = [], {}, [], weight_class(equipment, weight_t)
+    for port in ports:
+        freight = search_freight(conn, port.code, pod.code, equipment, on, containers)
+        if not freight["options"]:
+            no_freight.append({"code": port.code, "name": port.name})
+            continue
+        truck = search_trucking(conn, port.code, z.code, equipment, on, weight_t, trips=containers)
+        if not truck["options"]:   # e.g. the only prices are for the other weight class
+            no_freight.append({"code": port.code, "name": port.name})
+            continue
+        best_truck = truck["options"][0]
+        for f in (freight["fx"] + truck["fx"]):
+            fx[f["currency"]] = f
+        for fo in freight["options"]:
+            missing = set(fo["missing_fx"])
+            if best_truck["total_usd"] is None:
+                missing.add(best_truck["currency"])
+            total = None if missing else fo["total_usd"] + best_truck["total_usd"]
+            options.append({
+                "port": {"code": port.code, "name": port.name}, "freight": fo, "trucking": best_truck,
+                "other_truckers": len(truck["options"]) - 1, "total_usd": total,
+                "per_container_usd": None if total is None else (total / containers).quantize(CENT, ROUND_HALF_UP),
+                "missing_fx": sorted(missing), "expiring_soon": fo["expiring_soon"] or best_truck["expiring_soon"],
+            })
+    # Ranked by the door-to-port total; without FX, by freight then trucking so the list is still useful.
+    options.sort(key=lambda o: (o["total_usd"] is None, o["total_usd"] or 0,
+                                o["freight"]["total_usd"] is None, o["freight"]["total_usd"] or 0,
+                                o["trucking"]["total"]))
+    return {"mode": "door", "on": on, "origin": _loc(z), "destination": _loc(pod), "equipment": equipment,
+            "containers": containers, "weight_t": weight_t, "weight_class": wc,
+            "ports_checked": [{"code": p.code, "name": p.name} for p in ports], "ports_without_rates": no_freight,
+            "fx": [fx[c] for c in sorted(fx)], "options": options}
 
 
 def find_locations(conn: Connection, q: str, kinds: list[str] | None, limit: int = 15) -> list[dict]:

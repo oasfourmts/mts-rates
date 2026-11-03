@@ -83,6 +83,27 @@ export interface TruckingResult extends SearchBase {
   options: TruckingOption[];
 }
 
+export interface DoorOption {
+  port: Place;
+  freight: FreightOption;
+  trucking: TruckingOption;
+  other_truckers: number;
+  total_usd: Money | null;
+  per_container_usd: Money | null;
+  missing_fx: string[];
+  expiring_soon: boolean;
+}
+
+export interface DoorResult extends SearchBase {
+  mode: "door";
+  containers: number;
+  weight_t: string | null;
+  weight_class: string | null;
+  ports_checked: Place[];
+  ports_without_rates: Place[];
+  options: DoorOption[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -111,8 +132,9 @@ export const api = {
   me: () => get<{ email: string }>("me"),
   equipment: () => get<{ code: string; description: string }[]>("equipment"),
   locations: (q: string, kind?: string) => get<Place[]>("locations", { q, kind }),
-  freight: (p: { origin: string; destination: string; equipment: string; on?: string; containers?: number }) =>
-    get<FreightResult>("search/freight", p),
+  freight: (p: {
+    origin: string; destination: string; equipment: string; on?: string; containers?: number; weight_t?: string;
+  }) => get<FreightResult | DoorResult>("search/freight", p),
   trucking: (p: { port: string; zone: string; equipment: string; on?: string; weight_t?: string; trips?: number }) =>
     get<TruckingResult>("search/trucking", p),
 };

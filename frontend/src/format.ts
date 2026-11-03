@@ -52,3 +52,7 @@ export function validity(daysLeft: number): string {
   if (daysLeft === 1) return "ends tomorrow";
   return `${daysLeft} days left`;
 }
+
+export function days(t: string | number): string {
+  return `${t} ${String(t) === "1" ? "day" : "days"}`;
+}

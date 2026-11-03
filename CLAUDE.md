@@ -10,6 +10,7 @@ Freight forwarder rate platform for MTS Logistics (Egypt). Read README.md for la
   LCL, AIR. Trucking prices for 20DV depend on weight: `light` (< 8 t) or `heavy`.
 - Trucking prices in the legacy sheet are EGP buy prices per one-way trip, port to destination.
   Every column under an equipment group is a trucker (MTS, Ocean and Bayier are truckers too).
+  The same price applies to the export pickup leg, destination to port (confirmed by MTS, 3 Nov 2026).
 - Freight prices are USD per container unless a cell names another currency.
 - Never overwrite a rate. Expire it and add a new rate card.
 - Never guess a value. If a cell cannot be read with confidence, record an import issue.

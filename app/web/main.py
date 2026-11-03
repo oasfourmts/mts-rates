@@ -85,8 +85,12 @@ def create_app(settings: config.Settings | None = None, verify_iap=_verify_iap) 
 
     @app.get("/api/search/freight")
     def search_freight(user: Me, c: Conn, origin: str, destination: str, equipment: str,
-                       on: date | None = None, containers: int = Query(1, ge=1, le=500)):
-        return run(search.search_freight, c, origin, destination, equipment, on or today(), containers)
+                       on: date | None = None, containers: int = Query(1, ge=1, le=500),
+                       weight_t: Decimal | None = Query(None, gt=0, le=60), via: str | None = None):
+        """Port origin: port to port. Inland zone origin (a factory): door to port via every port with a
+        trucking price, or only `via`. 20DV door searches need weight_t (trucking is priced by weight)."""
+        return run(search.search_lane, c, origin, destination, equipment, on or today(), containers,
+                   weight_t, via or None)
 
     @app.get("/api/search/trucking")
     def search_trucking(user: Me, c: Conn, port: str, zone: str, equipment: str, on: date | None = None,

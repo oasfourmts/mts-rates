@@ -26,6 +26,7 @@ Plan: see the "MTS Rate Management Platform — Plan" doc. Roadmap deck: "MTS Ra
 - [x] Ocean freight sheet importer (monthly tabs; header-driven, so the Nov and Dec layouts both work)
 - [x] Rate search as SQL functions
 - [x] Rate search API: ocean freight (any number of boxes, per-B/L fees once, FX shown) and inland trucking
+- [x] Door to port: from a factory zone, pickup trucking + ocean freight via every port, ranked by total
 - [x] Rate Search screen
 - [ ] Other screens: Rate Cards, Bulk Import, Customs Matrix, Expiry Dashboard, Admin
 - [ ] Deploy to Cloud Run behind IAP, with Cloud SQL
