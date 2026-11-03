@@ -1,0 +1,7 @@
+# Web app runtime
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.6
+psycopg[binary]==3.3.7
+google-auth[requests]==2.62.1
+tzdata>=2024.1

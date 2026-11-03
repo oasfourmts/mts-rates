@@ -1,0 +1,118 @@
+// Typed calls to the FastAPI backend. Money arrives as strings ("1595.22") and stays a string until display.
+
+export type Money = string;
+
+export interface Place {
+  code: string;
+  name: string;
+  kind: string;
+  country_code?: string | null;
+}
+
+export interface Charge {
+  code: string;
+  name: string;
+  amount: Money;
+  currency: string;
+  basis: string;
+  quantity: number;
+  line_total: Money;
+  line_usd: Money | null;
+}
+
+export interface FreightOption {
+  rate_card_id: number;
+  freight_rate_id: number;
+  carrier: string;
+  rate_type: string;
+  routing: string | null;
+  via: string | null;
+  transit_days: string | null;
+  free_days: number | null;
+  free_time_terms: string | null;
+  valid_to: string;
+  days_left: number;
+  expiring_soon: boolean;
+  total_usd: Money | null;
+  per_container_usd: Money | null;
+  missing_fx: string[];
+  charges: Charge[];
+  remarks: string | null;
+}
+
+export interface TruckingOption {
+  rate_card_id: number;
+  transport_rate_id: number;
+  trucker: string;
+  price: Money;
+  currency: string;
+  weight_class: string | null;
+  trips: number;
+  total: Money;
+  total_usd: Money | null;
+  valid_to: string;
+  days_left: number;
+  expiring_soon: boolean;
+}
+
+export interface Fx {
+  currency: string;
+  per_usd: string;
+  on_date: string;
+}
+
+interface SearchBase {
+  on: string;
+  origin: Place;
+  destination: Place;
+  equipment: string;
+  fx: Fx[];
+}
+
+export interface FreightResult extends SearchBase {
+  mode: "freight";
+  containers: number;
+  options: FreightOption[];
+}
+
+export interface TruckingResult extends SearchBase {
+  mode: "trucking";
+  weight_t: string | null;
+  weight_class: string | null;
+  trips: number;
+  options: TruckingOption[];
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+async function get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+  const res = await fetch(`/api/${path}${qs.size ? "?" + qs : ""}`, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    let message = `The server answered ${res.status}.`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") message = body.detail;
+      else if (Array.isArray(body.detail)) message = body.detail.map((d: { msg: string }) => d.msg).join("; ");
+    } catch {
+      /* keep the status message */
+    }
+    throw new ApiError(res.status, message);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const api = {
+  me: () => get<{ email: string }>("me"),
+  equipment: () => get<{ code: string; description: string }[]>("equipment"),
+  locations: (q: string, kind?: string) => get<Place[]>("locations", { q, kind }),
+  freight: (p: { origin: string; destination: string; equipment: string; on?: string; containers?: number }) =>
+    get<FreightResult>("search/freight", p),
+  trucking: (p: { port: string; zone: string; equipment: string; on?: string; weight_t?: string; trips?: number }) =>
+    get<TruckingResult>("search/trucking", p),
+};
