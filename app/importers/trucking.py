@@ -40,6 +40,7 @@ class TruckingRate:
     weight_class: str | None
     price: Decimal
     row_ref: str
+    applies_to: str = "both"     # "import" / "export" when the cell gives one price per direction
 
 
 @dataclass
@@ -75,13 +76,83 @@ def parse_header(header: list[str], issues: list[Issue]) -> list[Column]:
     return columns
 
 
+_NUM = r"(\d[\d,]*(?:\.\d+)?)"
+_IMP, _EXP = r"IMP(?:ORT)?", r"EXP(?:ORT)?"
+# "15500 IMP-16000 EXP", "15500 IMP / 16000 EXP", "IMP 15500 - EXP 16000", in either order.
+_DUAL = [
+    re.compile(rf"^{_NUM}\s*(?P<a>{_IMP}|{_EXP})\s*[-/,;|]?\s*{_NUM}\s*(?P<b>{_IMP}|{_EXP})$", re.I),
+    re.compile(rf"^(?P<a>{_IMP}|{_EXP})\s*:?\s*{_NUM}\s*[-/,;|]?\s*(?P<b>{_IMP}|{_EXP})\s*:?\s*{_NUM}$", re.I),
+]
+
+
+def parse_directional(cell: str) -> dict[str, Decimal] | None:
+    """{"import": 15500, "export": 16000} for a cell naming both directions; None if it does not."""
+    text = clean(cell)
+    for pattern in _DUAL:
+        m = pattern.match(text)
+        if not m:
+            continue
+        nums = [g for g in m.groups() if g and g[0].isdigit()]
+        labels = [m.group("a").upper()[:3], m.group("b").upper()[:3]]
+        if sorted(labels) != ["EXP", "IMP"]:
+            return None          # "IMP ... IMP": not something to guess at
+        out = {}
+        for label, num in zip(labels, nums):
+            value = parse_number(num)
+            out["import" if label == "IMP" else "export"] = value
+        return out
+    return None
+
+
+def _group_end(cell: str) -> int | None:
+    for pattern, _ in GROUPS:
+        m = pattern.match(clean(cell))
+        if m:
+            return m.end()
+    return None
+
+
+def find_header(table: list[list[str]]) -> tuple[list[str], int] | None:
+    """The header as one row, plus the index of the first data row. Two layouts:
+    - the live sheet: the port in A1 (merged A1:A2), equipment groups (each merged across its trucker columns,
+      so the text sits in the group's first cell) and trucker names on a lower row, possibly with an empty row
+      between them;
+    - one row holding both, e.g. "20'DC < 8 tons MTS" (older CSV copies).
+    The live layout is joined column by column into the one-row form, so one header parser serves both."""
+    for g, row in enumerate(table[:10]):
+        starts = [i for i, c in enumerate(row) if i > 0 and _group_end(c) is not None]
+        if not starts:
+            continue
+        inline = any(clean(row[i])[_group_end(row[i]):].strip() for i in starts)
+        # Trucker names: the next row with text in the trucker columns. Rows in between can be empty: a group
+        # cell merged down across two rows keeps its text in the top row (live sheet, 3 Nov 2026: groups in
+        # B1:F2 and so on, row 2 empty, names on row 3).
+        n = next((k for k in range(g + 1, min(g + 4, len(table)))
+                  if any(clean(c) for c in table[k][1:])), None)
+        if inline or n is None:
+            header, first_data = list(row), g + 1
+        else:
+            names = table[n]
+            width = max(len(row), len(names))
+            cell = lambda r, i: r[i] if i < len(r) else ""  # noqa: E731
+            header = [" ".join(x for x in (clean(cell(row, i)), clean(cell(names, i))) if x) for i in range(width)]
+            first_data = n + 1
+        header[0] = next((clean(table[k][0]) for k in range(first_data) if table[k] and clean(table[k][0])), "")
+        return header, first_data
+    return None
+
+
 def parse(text: str, port_code: str | None = None) -> Result:
     result = Result()
     table = read_csv(text)
     if not table:
         result.issues.append(Issue("file", "skipped", "empty file"))
         return result
-    header = table[0]
+    found = find_header(table)
+    if found is None:
+        result.issues.append(Issue("header", "skipped", "no equipment group (e.g. 20'DC < 8 tons) in the first 10 rows"))
+        return result
+    header, first_data = found
     sheet_port = clean(header[0]).upper()
     if port_code is None:
         port_code = PORT_CODES.get(sheet_port)
@@ -90,7 +161,7 @@ def parse(text: str, port_code: str | None = None) -> Result:
             return result
     columns = parse_header(header, result.issues)
 
-    for r, row in enumerate(table[1:], start=2):
+    for r, row in enumerate(table[first_data:], start=first_data + 1):
         zone = clean(row[0]) if row else ""
         if not zone:
             continue
@@ -100,18 +171,21 @@ def parse(text: str, port_code: str | None = None) -> Result:
             if is_blank(raw):
                 continue
             try:
-                price = parse_number(raw)
+                prices = {"both": parse_number(raw)}
             except ValueError:
-                result.issues.append(Issue(ref, "skipped", "price is not a number", raw))
+                prices = parse_directional(raw)
+                if prices is None:
+                    result.issues.append(Issue(ref, "skipped", "price is not a number", raw))
+                    continue
+            if prices.get("both", 0) is None:
                 continue
-            if price is None:
-                continue
-            if price <= 0:
+            if any(p <= 0 for p in prices.values()):
                 result.issues.append(Issue(ref, "skipped", "price is 0 or less", raw))
                 continue
-            for equipment, weight in col.targets:
-                result.rows.append(TruckingRate(port_code, zone, display_name(col.trucker), match_key(col.trucker),
-                                                equipment, weight, price, ref))
+            for applies_to, price in prices.items():
+                for equipment, weight in col.targets:
+                    result.rows.append(TruckingRate(port_code, zone, display_name(col.trucker), match_key(col.trucker),
+                                                    equipment, weight, price, ref, applies_to))
     return result
 
 
@@ -133,9 +207,9 @@ def to_sql(result: Result, *, source_ref: str, valid_from: date, valid_to: date,
                         rate_type="tariff", valid_from=valid_from, valid_to=valid_to, currency="EGP",
                         status=status, source_ref=source_ref)
         s.add("INSERT INTO transport_rates (rate_card_id, origin_id, destination_id, equipment_code, weight_class, "
-              f"price, basis, source_row) VALUES ({sqlout.card(ck)}, {sqlout.loc(rate.port_code)}, "
+              f"price, basis, applies_to, source_row) VALUES ({sqlout.card(ck)}, {sqlout.loc(rate.port_code)}, "
               f"{sqlout.loc(zone_code(rate.zone_name))}, {sqlout.lit(rate.equipment)}, {sqlout.lit(rate.weight_class)}, "
-              f"{rate.price}, 'per_trip', {sqlout.lit(rate.row_ref)});")
+              f"{rate.price}, 'per_trip', {sqlout.lit(rate.applies_to)}, {sqlout.lit(rate.row_ref)});")
     for issue in result.issues:
         s.issue(issue.row_ref, issue.severity, issue.message, issue.raw)
     priced_cells = len({r.row_ref for r in result.rows})

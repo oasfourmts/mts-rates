@@ -116,3 +116,9 @@ def test_multiline_cell_in_free_time():
 def test_missing_required_column_stops_the_import():
     res = freight.parse('"Destination Port","Equipment"\n"Genoa","20\'DV"\n')
     assert res.rows == [] and res.issues[0].message.startswith("columns not found")
+
+
+def test_adabiya_is_a_port_of_loading():
+    from app.importers.freight import POL_CODES
+    from app.importers.common import match_key
+    assert POL_CODES[match_key("Adabya")] == "EGADA" == POL_CODES[match_key("Al Adabiyah")]

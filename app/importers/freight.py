@@ -63,7 +63,8 @@ SURCHARGES = ("BAF", "EBS", "LSS", "FUE", "ETS", "EFS", "WAR", "OTHER")
 USD_CEILING = {"OTHC": Decimal(600), "BL": Decimal(150)}
 
 POL_CODES = {"ALEXANDRIA": "EGALY", "EL DEKHEILA": "EGEDK", "DEKHEILA": "EGEDK", "DAMIETTA": "EGDAM",
-             "PORT SAID EAST": "EGPSE", "PSD EAST": "EGPSE", "SOKHNA": "EGSOK", "AIN SOKHNA": "EGSOK"}
+             "PORT SAID EAST": "EGPSE", "PSD EAST": "EGPSE", "SOKHNA": "EGSOK", "AIN SOKHNA": "EGSOK",
+             "ADABYA": "EGADA", "ADABIYA": "EGADA", "AL ADABIYAH": "EGADA", "EL ADABIYA": "EGADA"}
 
 CARRIERS = {
     "MSC": "MSC", "MAERSK": "Maersk", "CMA": "CMA CGM", "CMA CGM": "CMA CGM", "COSCO": "COSCO", "ONE": "ONE",
@@ -141,14 +142,23 @@ def parse(text: str) -> Result:
     if not table:
         result.issues.append(Issue("file", "skipped", "empty file"))
         return result
-    cols = map_columns(table[0])
-    missing = [c for c in REQUIRED if c not in cols]
-    if missing:
-        result.issues.append(Issue("header", "skipped", f"columns not found: {', '.join(missing)}"))
+    # The live sheet has a title row, a notes row and a row of column groups above the column names, so the
+    # header is the first of the top 10 rows that names every required column.
+    best, header_at = None, None
+    for i, row in enumerate(table[:10]):
+        cols = map_columns(row)
+        missing = [c for c in REQUIRED if c not in cols]
+        if not missing:
+            header_at = i
+            break
+        if best is None or len(missing) < len(best):
+            best = missing
+    if header_at is None:
+        result.issues.append(Issue("header", "skipped", f"columns not found in the first 10 rows: {', '.join(best)}"))
         return result
     result.no_offer = 0  # rows with no carrier: lanes nobody has quoted yet
 
-    for r, row in enumerate(table[1:], start=2):
+    for r, row in enumerate(table[header_at + 1:], start=header_at + 2):
         get = lambda name: row[cols[name]] if name in cols and cols[name] < len(row) else ""  # noqa: E731
         ref = f"row {r} ({clean(get('dest'))} / {clean(get('pol'))} / {clean(get('equipment'))})"
         if not clean(get("dest")):

@@ -58,12 +58,17 @@ $$;
 
 -- Inland trucking options between a port and an inland zone, cheapest first.
 -- For 20DV, pass the weight class ('light' under 8 t, 'heavy' otherwise); other equipment ignores it.
-CREATE OR REPLACE FUNCTION search_trucking(p_port text, p_zone text, p_equipment text,
-                                           p_weight_class text DEFAULT NULL, p_on date DEFAULT current_date)
+-- p_direction 'import' (delivery port -> zone) or 'export' (pickup zone -> port) uses that direction's price
+-- where the sheet gave one per direction, and the single price otherwise; NULL returns every price.
+DROP FUNCTION IF EXISTS search_trucking(text, text, text, text, date);
+DROP FUNCTION IF EXISTS search_trucking(text, text, text, text, date, text);
+CREATE FUNCTION search_trucking(p_port text, p_zone text, p_equipment text,
+                                p_weight_class text DEFAULT NULL, p_on date DEFAULT current_date,
+                                p_direction text DEFAULT NULL)
 RETURNS TABLE (rate_card_id bigint, transport_rate_id bigint, trucker text, price numeric,
-               currency char(3), weight_class text, valid_to date)
+               currency char(3), weight_class text, applies_to text, valid_to date)
 LANGUAGE sql STABLE AS $$
-    SELECT rc.id, tr.id, p.name, tr.price, rc.currency, tr.weight_class, rc.valid_to
+    SELECT rc.id, tr.id, p.name, tr.price, rc.currency, tr.weight_class, tr.applies_to, rc.valid_to
     FROM transport_rates tr
     JOIN rate_cards rc ON rc.id = tr.rate_card_id
     JOIN partners p ON p.id = rc.partner_id
@@ -71,9 +76,10 @@ LANGUAGE sql STABLE AS $$
       AND tr.destination_id = find_location(p_zone)
       AND tr.equipment_code = upper(p_equipment)
       AND (tr.weight_class IS NULL OR p_weight_class IS NULL OR tr.weight_class = p_weight_class)
+      AND (p_direction IS NULL OR tr.applies_to IN ('both', p_direction))
       AND rc.status = 'active'
       AND p_on BETWEEN rc.valid_from AND rc.valid_to
-    ORDER BY tr.price, p.name
+    ORDER BY tr.price, p.name, tr.applies_to
 $$;
 
 -- Lanes on the expiry dashboard: active rate cards ending within p_days.
