@@ -14,10 +14,11 @@ def without_ref(rows):
     return sorted(tuple(v for k, v in vars(r).items() if k not in ("ref", "source_row", "row_ref")) for r in rows)
 
 
+@pytest.mark.parametrize("groups_row", [1, 2])
 @pytest.mark.parametrize("name", TABS)
-def test_trucking_live_layout_matches_fixture(name):
+def test_trucking_live_layout_matches_fixture(name, groups_row):
     flat = trucking.parse((FIXTURES / f"{name}.csv").read_text())
-    live = trucking.parse(to_text(trucking_live(name)))
+    live = trucking.parse(to_text(trucking_live(name, groups_row)))
     assert len(live.rows) == len(flat.rows) > 100
     assert without_ref(live.rows) == without_ref(flat.rows)
     assert [i.severity for i in live.issues] == [i.severity for i in flat.issues]

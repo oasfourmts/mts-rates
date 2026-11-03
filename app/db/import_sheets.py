@@ -30,6 +30,7 @@ import psycopg
 
 from app.db.connect import conninfo
 from app.importers import freight, trucking
+from app.importers.common import clean
 
 TRUCKING_SHEET = os.environ.get("TRUCKING_SHEET_ID", "1t8rVYcNeku5JZG7vEfXAAoj-prAFdgGAheVs_byg2xI")
 FREIGHT_SHEET = os.environ.get("FREIGHT_SHEET_ID", "1VAGxvxIU5E1GiNjbSuO4DmoTekKWvgK7U8z7RUxPoxM")
@@ -126,10 +127,11 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
                 conn.execute(script())   # one BEGIN ... COMMIT script per tab
                 res.status = "imported"
         log(f"{kind:8} {tab:16} {res.status:9} {res.rows:4} rows, {res.issues} issue(s)")
-        for i in parsed.issues[:5]:
-            log(f"           [{i.severity}] {i.row_ref}: {i.message}")
-        if len(parsed.issues) > 5:
-            log(f"           ... {len(parsed.issues) - 5} more in import_issues")
+        shown = parsed.issues if dry_run else parsed.issues[:5]    # a trial run is for review: list them all
+        for i in shown:
+            log(f"           [{i.severity}] {i.row_ref}: {i.message}" + (f" ({clean(i.raw)})" if i.raw else ""))
+        if len(parsed.issues) > len(shown):
+            log(f"           ... {len(parsed.issues) - len(shown)} more in import_issues")
         results.append(res)
     empty = [r.tab for r in results if r.status == "empty"]
     if empty:

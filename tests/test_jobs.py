@@ -28,7 +28,7 @@ def fresh():
 def test_migrate_runs_once_and_refuses_edited_files(fresh, tmp_path):
     name, conn = fresh
     assert migrate.apply(conn, log=lambda *_: None) == ["0001_initial.sql", "0002_fx_entry.sql",
-                                                       "0003_trucking_direction.sql"]
+                                                       "0003_trucking_direction.sql", "0004_adabiya.sql"]
     assert migrate.apply(conn, log=lambda *_: None) == []
     assert psql(name, "SELECT count(*) FROM search_freight('EGALY', 'ITGOA', '20DV')") == "0"   # functions exist
     root = tmp_path / "db"
@@ -59,7 +59,7 @@ def fixture_fetch(sheet_id, tab):
     from tests.sheet_layout import freight_live, trucking_live
     files = {"ALEXANDRIA": "trucking_alexandria", "SOKHNA": "trucking_sokhna", "PSD EAST": "trucking_psd_east",
              "DAMIETTA": "trucking_damietta"}
-    return freight_live() if tab == "November 2026" else trucking_live(files[tab])
+    return freight_live() if tab == "November 2026" else trucking_live(files[tab], groups_row=1)
 
 
 def test_import_month_then_rerun_skips(fresh):

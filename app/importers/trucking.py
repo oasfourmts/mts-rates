@@ -114,8 +114,9 @@ def _group_end(cell: str) -> int | None:
 
 def find_header(table: list[list[str]]) -> tuple[list[str], int] | None:
     """The header as one row, plus the index of the first data row. Two layouts:
-    - the live sheet: the port in A1 (merged A1:A2), equipment groups on one row (each merged across its
-      trucker columns, so the text sits in the group's first cell) and trucker names on the row below;
+    - the live sheet: the port in A1 (merged A1:A2), equipment groups (each merged across its trucker columns,
+      so the text sits in the group's first cell) and trucker names on a lower row, possibly with an empty row
+      between them;
     - one row holding both, e.g. "20'DC < 8 tons MTS" (older CSV copies).
     The live layout is joined column by column into the one-row form, so one header parser serves both."""
     for g, row in enumerate(table[:10]):
@@ -123,14 +124,19 @@ def find_header(table: list[list[str]]) -> tuple[list[str], int] | None:
         if not starts:
             continue
         inline = any(clean(row[i])[_group_end(row[i]):].strip() for i in starts)
-        if inline or g + 1 >= len(table):
+        # Trucker names: the next row with text in the trucker columns. Rows in between can be empty: a group
+        # cell merged down across two rows keeps its text in the top row (live sheet, 3 Nov 2026: groups in
+        # B1:F2 and so on, row 2 empty, names on row 3).
+        n = next((k for k in range(g + 1, min(g + 4, len(table)))
+                  if any(clean(c) for c in table[k][1:])), None)
+        if inline or n is None:
             header, first_data = list(row), g + 1
         else:
-            names = table[g + 1]
+            names = table[n]
             width = max(len(row), len(names))
             cell = lambda r, i: r[i] if i < len(r) else ""  # noqa: E731
             header = [" ".join(x for x in (clean(cell(row, i)), clean(cell(names, i))) if x) for i in range(width)]
-            first_data = g + 2
+            first_data = n + 1
         header[0] = next((clean(table[k][0]) for k in range(first_data) if table[k] and clean(table[k][0])), "")
         return header, first_data
     return None

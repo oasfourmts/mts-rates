@@ -5,7 +5,7 @@ Freight forwarder rate platform for MTS Logistics (Egypt). Read README.md for la
 ## Domain rules
 
 - Ports use UN/LOCODE (EGALY Alexandria, EGEDK El Dekheila, EGDAM Damietta, EGPSE Port Said East,
-  EGSOK Sokhna). Airports use IATA codes. Inland trucking destinations are `inland_zone` locations.
+  EGSOK Sokhna, EGADA Adabiya). Airports use IATA codes. Inland trucking destinations are `inland_zone` locations.
 - Equipment codes: 20DV, 40DV, 40HC, 40RF, 20OT, 40OT, 20FR, 40FR, 2X20DV (two 20' boxes on one truck),
   LCL, AIR. Trucking prices for 20DV depend on weight: `light` (< 8 t) or `heavy`.
 - Trucking prices in the legacy sheet are EGP buy prices per one-way trip, port to destination.
