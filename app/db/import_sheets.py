@@ -8,9 +8,10 @@ app/importers, and loaded in one transaction per tab.
 
 - Trucking tabs have no dates, so their prices are valid for the whole --month.
 - The freight tab for the month is named like "November 2026"; validity comes from its own columns.
-- A tab whose exact contents were already imported is skipped (the run's source_ref carries a SHA-256 of the
-  text), so running the job twice never duplicates rate cards. A changed tab is a new import with new rate
-  cards: rates are never overwritten.
+- A tab whose exact contents were already imported for the month is skipped (the run's source_ref carries the
+  month and a SHA-256 of the text), so running the job twice never duplicates rate cards.
+- A changed tab replaces its earlier import for the same month: in one transaction the earlier rate cards are
+  expired (never deleted or edited) and the new ones added, so each lane shows the sheet as it is now.
 - Cells the parsers cannot read with confidence go to import_issues; nothing is guessed.
 """
 from __future__ import annotations
@@ -29,7 +30,7 @@ from urllib.parse import quote
 import psycopg
 
 from app.db.connect import conninfo
-from app.importers import freight, trucking
+from app.importers import freight, sqlout, trucking
 from app.importers.common import clean
 
 TRUCKING_SHEET = os.environ.get("TRUCKING_SHEET_ID", "1t8rVYcNeku5JZG7vEfXAAoj-prAFdgGAheVs_byg2xI")
@@ -80,10 +81,34 @@ class TabResult:
     status: str          # imported, skipped, dry-run, empty
     rows: int
     issues: int
+    replaced: int = 0    # earlier rate cards from this tab and month, now expired
 
 
-def source_ref(sheet_id: str, tab: str, text: str) -> str:
-    return f"sheet {sheet_id} tab '{tab}' sha256:{hashlib.sha256(text.encode()).hexdigest()[:16]}"
+def source_key(sheet_id: str, tab: str, month: date) -> str:
+    """Identifies "this tab for this month". Trucking tabs carry no dates, so the month is part of the key:
+    December's import of an unchanged tab is a new import, not a repeat of November's."""
+    return f"sheet {sheet_id} tab '{tab}' month {month:%Y-%m}"
+
+
+def source_ref(sheet_id: str, tab: str, text: str, month: date) -> str:
+    return f"{source_key(sheet_id, tab, month)} sha256:{hashlib.sha256(text.encode()).hexdigest()[:16]}"
+
+
+def active_cards(conn, key: str) -> int:
+    return conn.execute(
+        "SELECT count(*) FROM rate_cards rc JOIN import_runs ir ON ir.id = rc.import_run_id "
+        "WHERE rc.status = 'active' AND left(ir.source_ref, length(%s)) = %s", (key, key)).fetchone()[0]
+
+
+def supersede_sql(key: str) -> str:
+    """Runs inside the new import's transaction, before its cards are added: the tab's earlier cards for the same
+    month are expired (status only; nothing is deleted or changed), and the audit log records how many."""
+    k = sqlout.lit(key)
+    return ("WITH old AS (UPDATE rate_cards SET status = 'expired' WHERE status = 'active' AND import_run_id IN "
+            f"(SELECT id FROM import_runs WHERE left(source_ref, length({k})) = {k}) RETURNING id) "
+            "INSERT INTO audit_log (actor, action, table_name, detail) SELECT 'import_sheets', "
+            f"'rate_cards.superseded', 'rate_cards', jsonb_build_object('source', {k}, 'expired', count(*), "
+            "'rate_card_ids', jsonb_agg(id)) FROM old HAVING count(*) > 0;")
 
 
 def already_imported(conn, ref: str) -> bool:
@@ -110,7 +135,8 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
 
     for kind, sheet_id, tab, port in jobs:
         text = to_csv(fetch(sheet_id, tab))
-        ref = source_ref(sheet_id, tab, text)
+        key = source_key(sheet_id, tab, first)
+        ref = source_ref(sheet_id, tab, text, first)
         if kind == "trucking":
             parsed = trucking.parse(text, port)
             script = lambda: trucking.to_sql(parsed, source_ref=ref, valid_from=first, valid_to=last)  # noqa: E731
@@ -124,9 +150,14 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
             if already_imported(conn, ref):
                 res.status = "skipped"
             else:
-                conn.execute(script())   # one BEGIN ... COMMIT script per tab
+                res.replaced = active_cards(conn, key)
+                sql = script()
+                assert sql.startswith("BEGIN;")
+                # One transaction per tab: expire the tab's earlier cards for this month, then load the new ones.
+                conn.execute("BEGIN;\n" + supersede_sql(key) + sql[len("BEGIN;"):])
                 res.status = "imported"
-        log(f"{kind:8} {tab:16} {res.status:9} {res.rows:4} rows, {res.issues} issue(s)")
+        log(f"{kind:8} {tab:16} {res.status:9} {res.rows:4} rows, {res.issues} issue(s)"
+            + (f", replaces {res.replaced} earlier rate card(s)" if res.replaced else ""))
         shown = parsed.issues if dry_run else parsed.issues[:5]    # a trial run is for review: list them all
         for i in shown:
             log(f"           [{i.severity}] {i.row_ref}: {i.message}" + (f" ({clean(i.raw)})" if i.raw else ""))

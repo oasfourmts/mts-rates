@@ -109,7 +109,40 @@ def test_empty_tab_fails_and_does_not_block_a_retry(fresh):
                           only="trucking", log=lambda *_: None)
     assert psql(name, "SELECT count(*) FROM rate_cards") == "0"
     text = import_sheets.to_csv(fixture_fetch(None, "ALEXANDRIA"))
-    ref = import_sheets.source_ref(import_sheets.TRUCKING_SHEET, "ALEXANDRIA", text)
+    ref = import_sheets.source_ref(import_sheets.TRUCKING_SHEET, "ALEXANDRIA", text, date(2026, 11, 1))
     conn.execute("INSERT INTO import_runs (source_kind, source_ref) VALUES ('sheet', %s)", (ref,))  # empty earlier run
     res = import_sheets.run(conn, fixture_fetch, date(2026, 11, 1), only="trucking", log=lambda *_: None)
     assert res[0].status == "imported" and int(psql(name, "SELECT count(*) FROM transport_rates")) > 100
+
+
+def test_changed_tab_replaces_its_earlier_import_for_the_month(fresh):
+    name, conn = fresh
+    migrate.apply(conn, log=lambda *_: None)
+    nov = date(2026, 11, 1)
+    import_sheets.run(conn, fixture_fetch, nov, only="trucking", log=lambda *_: None)
+    active = "SELECT count(*) FROM transport_rates tr JOIN rate_cards rc ON rc.id = tr.rate_card_id " \
+             "WHERE rc.status = 'active'"
+    before = psql(name, active)
+
+    def changed(sheet_id, tab):            # Pricing edits one Alexandria price during the month
+        rows = fixture_fetch(sheet_id, tab)
+        if tab == "ALEXANDRIA":
+            row = next(r for r in rows if r and r[0] == "6th of October")
+            row[1] = "13250"
+        return rows
+
+    lines = []
+    res = import_sheets.run(conn, changed, nov, only="trucking", log=lines.append)
+    assert [r.status for r in res] == ["imported", "skipped", "skipped", "skipped"]
+    assert res[0].replaced > 0 and "replaces" in lines[0]
+    assert psql(name, active) == before                       # no duplicates: the old Alexandria cards expired
+    assert psql(name, "SELECT count(*) FROM rate_cards WHERE status = 'expired'") == str(res[0].replaced)
+    prices = psql(name, "SELECT price FROM search_trucking('EGALY', '6th of October', '20DV', 'light', '2026-11-10') "
+                        "WHERE trucker = 'MTS'")
+    assert prices == "13250.00"
+    assert psql(name, "SELECT detail->>'expired' FROM audit_log WHERE action = 'rate_cards.superseded'") == \
+        str(res[0].replaced)
+
+    dec = import_sheets.run(conn, changed, date(2026, 12, 1), only="trucking", log=lambda *_: None)
+    assert [r.status for r in dec] == ["imported"] * 4 and all(r.replaced == 0 for r in dec)
+    assert psql(name, active) == str(2 * int(before))         # November untouched, December added
