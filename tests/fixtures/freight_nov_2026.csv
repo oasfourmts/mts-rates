@@ -1,0 +1,29 @@
+"OCEAN FREIGHT RATE  – NOVEMBER 2026 Currency: USD per container | Cargo: dry, general | One row per destination / POL / equipment SHIPPER ROUTE DATA #","Destination Port","UN/LOCODE","Country","Port of Loading (POL)","Equipment","CARRIER Shipping Line
+ ","ROUTING & SCHEDULE Routing
+ (Direct / INDirect)","Transshipment Port(s)","Transit Time
+ (days)","RATES & SURCHARGES (USD per container) Ocean
+ Freight","BAF","EBS","ECA / LSS","FUE","ETS","EFS","War Risk","Other Surcharges
+ (Red Sea, PSS, etc.)","ALL-IN TOTAL
+ (USD)","OTHC","B/L fees per shipment","TERMS Free Time at Destination
+ (days)","Valid From","Valid To","Remarks / Restrictions",""
+"1","Navegantes","BRNVT","Brazil","Alexandria","20'DV","MSC","Indirect","Tekirdag , Valencia","46-50","350","","","40","15","80","120","","","605","EGP 8045","","21","01-Nov-2026","30-Nov-2026","R19526060000051",""
+"","Navegantes","BRNVT","Brazil","Alexandria","40'HC","MSC","Indirect","Tekirdag , Valencia","46-50","650","","","80","30","160","240","","","1,160","EGP 11460","","21","01-Nov-2026","30-Nov-2026","R19526060000051",""
+"","Navegantes","BRNVT","Brazil","El Dekheila","20'DV","","","","","","","","","","","","","","","","","","01-Nov-2026","30-Nov-2026","",""
+"","Beirut","LBBEY","Lebanon","Alexandria","20'DV","COSCO","Direct","-","1","515","-","-","-","-","-","-","-","-","515","125","400 EGP","7 DND","01-Nov-2026","30-Nov-2026","",""
+"","Beirut","LBBEY","Lebanon","Alexandria","40'HC","COSCO","Direct","-","1","880","-","-","-","-","-","-","-","-","880","175","400 EGP","7 DND","01-Nov-2026","30-Nov-2026","",""
+"","Beirut","LBBEY","Lebanon","El Dekheila","20'DV","-","-","-","-","","-","-","-","-","-","-","-","-","","","","","01-Nov-2026","30-Nov-2026","",""
+"","Beirut","LBBEY","Lebanon","Port Said East","40'HC","Maersk Spot ","Direct","_","1 Day","251","-","-","-","-","-","-","-","-","251","255","-","21 Days DET ","01-Nov-2026","30-Nov-2026","",""
+"4","Genoa","ITGOA","Italy","Alexandria","20'DV","Tarros","Direct","-","2 Days","350","-","-","-","-","-","-","-","-","350","125","","","01-Nov-2026","30-Nov-2026","R19524110000057",""
+"","Genoa","ITGOA","Italy","Alexandria","20'DV","CMA Spot","Direct","-","6 Days","220","-","-","-","-","-","-","-","-","220","210","","","01-Nov-2026","30-Nov-2026","",""
+"","Koper","SIKOP","Slovenia","Damietta","20'DV","COSCO ","Direct","","15 Day","","-","-","-","-","-","-","-","-","440","","400 EGP","7 Merged","01-Nov-2026","30-Nov-2026","",""
+"","Koper","SIKOP","Slovenia","Port Said East","20'DV","Hapag Lloyed","Direct","-","6 Days","","-","-","-","-","-","-","-","-","","","","","01-Nov-2026","30-Nov-2026","",""
+"","Ashdod","ILASH","Israel","Damietta","20'DV","ZIM","Direct","-","4","450","-","-","-","-","-","-","-","-","450","200","Holiday fees: 50% on loading export","14","01-Nov-2026","30-Nov-2026","Carrier to confirm cargo acceptance / any special conditions",""
+"8","Izmir","TRIZM","Turkey","Alexandria","20'DV","Arkas","Direct","","11","275","","","","","","","","","","7800","750","14","01-Nov-2026","30-Nov-2026","",""
+"","Izmir","TRIZM","Turkey","Damietta","40'HC","Cosco","Indirect","Pireaus","20","400","","230","","","","","","","630","","","","01-Nov-2026","30-Nov-2026","10 days DND",""
+"","Mombasa","KEMBA","Kenya","Port Said East","20'DV","Hapag Lloyed","Indirect","Mundra","49","1,500","-","-","-","-","-","-","-","-","1500","180$","36$","10","01-Nov-2026","30-Nov-2026","800 EGP telex fees",""
+"","Mombasa","KEMBA","Kenya","Sokhna","40'HC","MSC","Indirect","king abdullah ","25-30 ","2,750","-","-","-","-","-","290","-","-","3040","","500 EGP","21","01-Nov-2026","30-Nov-2026","",""
+"","Casablanca","MACAS","Morocco","Alexandria","40'HC","Arkas ","Indrirect","-","25 - 30 ","1000","-","-","-","-","-","-","-","-","700","","750 EGP","21","01-Nov-2026","30-Nov-2026","",""
+"","Hamburg","DEHAM","Germany","Damietta","40'HC","MSC","Direct","-","12-15","950","-","-","-","-","-","114$","-","-","1064","","500 EGP","14","01-Nov-2026","30-Nov-2026","",""
+"","Hamburg","DEHAM","Germany","Damietta","20'DV","ZIM","Direct","-","12","300","-","-","-","-","-","-","-","NEF 66 EUR ","375$","150$","30$","14","01-Nov-2026","30-Nov-2026","",""
+"","Caucedo","DOCAU","Dominican Republic","El Dekheila","20'DV","MSC","Indirect","Antwerp","44-51 ","825","","","40","21","117","150","","","","","","","01-Nov-2026","30-Nov-2026","",""
+"","Valencia","ESVLC","Spain","Alexandria","20'DV","CMA Spot","Indirect","Via Malta","15 - 19 ","190","-","-","-","-","-","-","-","-","190","211","27","7 Merged","01-Nov-2026","30-Nov-2026","",""
