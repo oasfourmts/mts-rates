@@ -110,10 +110,23 @@ export class ApiError extends Error {
   }
 }
 
+export interface FxRow {
+  currency: string;
+  on_date: string;
+  per_usd: string;
+  source: string;
+  entered_by: string | null;
+  entered_at: string;
+}
+
 async function get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
-  const res = await fetch(`/api/${path}${qs.size ? "?" + qs : ""}`, { headers: { Accept: "application/json" } });
+  return send<T>(`/api/${path}${qs.size ? "?" + qs : ""}`, { headers: { Accept: "application/json" } });
+}
+
+async function send<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
   if (!res.ok) {
     let message = `The server answered ${res.status}.`;
     try {
@@ -129,7 +142,15 @@ async function get<T>(path: string, params: Record<string, string | number | und
 }
 
 export const api = {
-  me: () => get<{ email: string }>("me"),
+  me: () => get<{ email: string; is_admin: boolean }>("me"),
+  currencies: () => get<{ code: string; name: string }[]>("currencies"),
+  fxRates: (months = 13) => get<FxRow[]>("fx", { months }),
+  saveFx: (currency: string, month: string, per_usd: string, confirm = false) =>
+    send<FxRow>(`/api/fx/${encodeURIComponent(currency)}/${encodeURIComponent(month)}`, {
+      method: "PUT",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ per_usd, confirm }),
+    }),
   equipment: () => get<{ code: string; description: string }[]>("equipment"),
   locations: (q: string, kind?: string) => get<Place[]>("locations", { q, kind }),
   freight: (p: {

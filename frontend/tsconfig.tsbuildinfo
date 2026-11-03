@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/LocationInput.tsx","./src/api.ts","./src/format.ts","./src/main.tsx","./vite.config.ts"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/FxPage.tsx","./src/LocationInput.tsx","./src/api.ts","./src/format.ts","./src/main.tsx","./vite.config.ts"],"version":"5.9.3"}

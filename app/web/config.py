@@ -5,7 +5,8 @@ AUTH_MODE        "iap" (default, production) or "dev" (local only: every request
 IAP_AUDIENCE     IAP's expected JWT audience, e.g. /projects/123/global/backendServices/456 or
                  /projects/123/locations/europe-west1/services/mts-rates (needed when AUTH_MODE=iap)
 ALLOWED_DOMAIN   Only these Workspace accounts get in (default mtslogistics.net)
-DEV_USER         The user every request runs as when AUTH_MODE=dev
+DEV_USER         The user every request runs as when AUTH_MODE=dev (always an admin)
+ADMIN_EMAILS     Comma-separated accounts that may enter exchange rates (until roles live in the database)
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ class Settings:
     iap_audience: str | None
     allowed_domain: str
     dev_user: str
+    admin_emails: frozenset[str] = frozenset()
 
 
 def load() -> Settings:
@@ -32,4 +34,5 @@ def load() -> Settings:
         iap_audience=os.environ.get("IAP_AUDIENCE") or None,
         allowed_domain=os.environ.get("ALLOWED_DOMAIN", "mtslogistics.net").lower().lstrip("@"),
         dev_user=os.environ.get("DEV_USER", "dev@mtslogistics.net"),
+        admin_emails=frozenset(e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()),
     )

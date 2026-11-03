@@ -56,7 +56,7 @@ def test_iap_accepts_mts_account():
         assert token == "signed" and aud == "/projects/1/aud"
         return {"iss": "https://cloud.google.com/iap", "email": "Osama@MTSLogistics.net"}
     r = iap_client(verify).get("/api/me", headers={"x-goog-iap-jwt-assertion": "signed"})
-    assert r.status_code == 200 and r.json() == {"email": "osama@mtslogistics.net"}
+    assert r.status_code == 200 and r.json() == {"email": "osama@mtslogistics.net", "is_admin": False}
 
 
 @pytest.mark.parametrize("claims", [

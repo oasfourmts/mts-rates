@@ -9,6 +9,7 @@ import {
   type TruckingResult,
 } from "./api";
 import { basis, cairoToday, day, days, money, moneyIn, validity } from "./format";
+import { FxPage } from "./FxPage";
 import { LocationInput } from "./LocationInput";
 
 type Mode = "freight" | "trucking";
@@ -43,10 +44,49 @@ function writeUrl(f: Form) {
   history.replaceState(null, "", `?${p}`);
 }
 
+type Page = "search" | "fx";
+const pageFromPath = (): Page => (location.pathname.startsWith("/exchange-rates") ? "fx" : "search");
+
 export function App() {
+  const [page, setPage] = useState<Page>(pageFromPath);
+  const [me, setMe] = useState<{ email: string; is_admin: boolean } | null>(null);
+
+  useEffect(() => {
+    api.me().then(setMe).catch(() => setMe(null));
+    const onPop = () => setPage(pageFromPath());
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, []);
+
+  function go(e: React.MouseEvent<HTMLAnchorElement>, to: Page) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // let the browser open a new tab
+    e.preventDefault();
+    history.pushState(null, "", to === "fx" ? "/exchange-rates" : "/");
+    setPage(to);
+  }
+
+  return (
+    <div className="page">
+      <header className="top">
+        <span className="brand">MTS Rates</span>
+        <nav className="nav" aria-label="Screens">
+          <a href="/" aria-current={page === "search" ? "page" : undefined} onClick={(e) => go(e, "search")}>
+            Rate Search
+          </a>
+          <a href="/exchange-rates" aria-current={page === "fx" ? "page" : undefined} onClick={(e) => go(e, "fx")}>
+            Exchange rates
+          </a>
+        </nav>
+        {me && <span className="who">{me.email}</span>}
+      </header>
+      <main>{page === "fx" ? <FxPage isAdmin={!!me?.is_admin} /> : <RateSearch />}</main>
+    </div>
+  );
+}
+
+function RateSearch() {
   const [form, setForm] = useState<Form>(readUrl);
   const [equipment, setEquipment] = useState<string[]>(["20DV", "40DV", "40HC", "40RF", "2X20DV"]);
-  const [me, setMe] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
   const [result, setResult] = useState<AnyResult | null>(null);
@@ -54,7 +94,6 @@ export function App() {
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
-    api.me().then((m) => setMe(m.email)).catch(() => setMe(""));
     api.equipment().then((e) => setEquipment(e.map((x) => x.code).filter((c) => !NOT_BOXES.has(c)))).catch(() => {});
     if (form.from && form.to) void run(form);
     // Run once on load when the link carries a search.
@@ -107,13 +146,7 @@ export function App() {
   const trucking = form.mode === "trucking";
 
   return (
-    <div className="page">
-      <header className="top">
-        <span className="brand">MTS Rates</span>
-        {me && <span className="who">{me}</span>}
-      </header>
-
-      <main>
+    <>
         <div className="modes" role="radiogroup" aria-label="What to price">
           {(["freight", "trucking"] as Mode[]).map((m) => (
             <button
@@ -198,8 +231,7 @@ export function App() {
             </p>
           )}
         </section>
-      </main>
-    </div>
+    </>
   );
 }
 
@@ -222,18 +254,38 @@ function Summary({ r, count, unit }: { r: AnyResult; count: number; unit: string
 }
 
 function FxNote({ r }: { r: AnyResult }) {
-  if (!r.fx.length) return null;
+  const searchMonth = r.on.slice(0, 7);
+  const stale = r.fx.filter((f) => f.on_date.slice(0, 7) < searchMonth);
+  const missing = new Set<string>();
+  for (const o of r.options as { missing_fx?: string[] }[]) for (const c of o.missing_fx ?? []) missing.add(c);
+  const monthOf = (iso: string) =>
+    new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, 1).toLocaleDateString("en-GB", { month: "long" });
   return (
-    <p className="fx">
-      Converted at{" "}
-      {r.fx.map((f, i) => (
-        <Fragment key={f.currency}>
-          {i > 0 && ", "}
-          {Number(f.per_usd)} {f.currency} per USD ({day(f.on_date)})
-        </Fragment>
-      ))}
-      .
-    </p>
+    <>
+      {r.fx.length > 0 && (
+        <p className="fx">
+          Converted at{" "}
+          {r.fx.map((f, i) => (
+            <Fragment key={f.currency}>
+              {i > 0 && ", "}
+              {Number(f.per_usd)} {f.currency} per USD ({monthOf(f.on_date)} rate)
+            </Fragment>
+          ))}
+          .
+        </p>
+      )}
+      {stale.length > 0 && (
+        <p className="warn-note">
+          No {monthOf(r.on)} rate yet for {stale.map((f) => f.currency).join(", ")}, so the latest earlier one was used.
+          Enter it on <a href="/exchange-rates">Exchange rates</a>.
+        </p>
+      )}
+      {missing.size > 0 && (
+        <p className="warn-note">
+          Totals need a {[...missing].join(", ")} rate. Enter it on <a href="/exchange-rates">Exchange rates</a>.
+        </p>
+      )}
+    </>
   );
 }
 

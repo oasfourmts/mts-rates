@@ -14,6 +14,7 @@ IAP_ISSUER = "https://cloud.google.com/iap"
 @dataclass(frozen=True)
 class User:
     email: str
+    is_admin: bool = False
 
 
 def _verify_iap(token: str, audience: str) -> dict:
@@ -27,7 +28,7 @@ def _verify_iap(token: str, audience: str) -> dict:
 def current_user(request: Request) -> User:
     settings = request.app.state.settings
     if settings.auth_mode == "dev":
-        return User(settings.dev_user)
+        return User(settings.dev_user, is_admin=True)
     if not settings.iap_audience:
         raise HTTPException(503, "Sign-in is not configured (IAP_AUDIENCE is not set)")
     token = request.headers.get("x-goog-iap-jwt-assertion")
@@ -40,4 +41,11 @@ def current_user(request: Request) -> User:
     email = str(claims.get("email", "")).lower()
     if claims.get("iss") != IAP_ISSUER or not email.endswith("@" + settings.allowed_domain):
         raise HTTPException(403, f"Only @{settings.allowed_domain} accounts can use this app")
-    return User(email)
+    return User(email, is_admin=email in settings.admin_emails)
+
+
+def require_admin(request: Request) -> User:
+    user = current_user(request)
+    if not user.is_admin:
+        raise HTTPException(403, "Only admins can change exchange rates. Ask an admin to add yours.")
+    return user
