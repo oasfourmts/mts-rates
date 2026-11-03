@@ -1,6 +1,6 @@
 """Settings, read once from the environment.
 
-DATABASE_URL     SQLAlchemy URL, e.g. postgresql+psycopg://user@/mts?host=/cloudsql/PROJECT:REGION:INSTANCE
+DATABASE_URL     SQLAlchemy URL for local work; on Cloud Run DB_HOST/DB_NAME/DB_USER/DB_PASSWORD (app/db/connect.py)
 AUTH_MODE        "iap" (default, production) or "dev" (local only: every request is DEV_USER)
 IAP_AUDIENCE     IAP's expected JWT audience, e.g. /projects/123/global/backendServices/456 or
                  /projects/123/locations/europe-west1/services/mts-rates (needed when AUTH_MODE=iap)
@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+
+from app.db import connect
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,7 @@ def load() -> Settings:
     if mode not in ("iap", "dev"):
         raise ValueError(f"AUTH_MODE must be 'iap' or 'dev', not {mode!r}")
     return Settings(
-        database_url=os.environ.get("DATABASE_URL", "postgresql+psycopg://postgres@/mts?host=/tmp&port=5433"),
+        database_url=connect.sqlalchemy_url(),
         auth_mode=mode,
         iap_audience=os.environ.get("IAP_AUDIENCE") or None,
         allowed_domain=os.environ.get("ALLOWED_DOMAIN", "mtslogistics.net").lower().lstrip("@"),
