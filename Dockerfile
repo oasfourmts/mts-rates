@@ -20,5 +20,4 @@ COPY --from=web /src/frontend/dist ./frontend/dist
 RUN useradd --system --uid 10001 mts
 USER mts
 # Cloud Run sets PORT. The jobs override the command (python -m app.db.migrate / app.db.import_sheets).
-CMD exec uvicorn app.web.main:create_app --factory --host 0.0.0.0 --port "${PORT:-8080}" \
-    --proxy-headers --forwarded-allow-ips="*" --no-server-header
+CMD ["sh", "-c", "exec uvicorn app.web.main:create_app --factory --host 0.0.0.0 --port \"${PORT:-8080}\" --proxy-headers --forwarded-allow-ips='*' --no-server-header"]

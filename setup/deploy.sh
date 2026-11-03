@@ -68,7 +68,13 @@ if ! gcloud artifacts repositories describe mts-rates --location="$REGION" >/dev
 fi
 gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet >/dev/null
 docker build -t "$IMAGE" .
-docker push "$IMAGE"
+# Cloud Shell's connection to the registry sometimes drops; retry before giving up.
+for attempt in 1 2 3 4 5; do
+  if docker push "$IMAGE"; then break; fi
+  [[ $attempt == 5 ]] && fail "could not upload the image to $REPO after 5 tries. Check: curl -sI https://$REGION-docker.pkg.dev/v2/ (a 401 means the registry is reachable)"
+  echo "upload failed (try $attempt of 5), retrying in $((attempt * 10))s..."
+  sleep $((attempt * 10))
+done
 
 # --- 3. Database passwords (generated once, never printed) ----------------------------------------------------
 step "Database passwords in Secret Manager"
