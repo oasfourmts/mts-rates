@@ -59,6 +59,28 @@ def test_port_origin_still_prices_port_to_port(client):
     assert body["mode"] == "freight" and body["options"][0]["carrier"] == "Maersk"
 
 
+def test_el_dekheila_is_trucked_at_alexandria_prices(client, db):
+    # The fixture has a MSC El Dekheila -> Douala offer and Alexandria trucking to 10th of Ramadan.
+    t = client.get("/api/search/trucking", params={"port": "EGEDK", "zone": "10th of Ramadan", "equipment": "20DV",
+                                                   "weight_t": 5, "on": NOV}).json()
+    alex = client.get("/api/search/trucking", params={"port": "EGALY", "zone": "10th of Ramadan", "equipment": "20DV",
+                                                      "weight_t": 5, "on": NOV}).json()
+    assert t["origin"]["code"] == "EGEDK" and t["priced_as"]["code"] == "EGALY"
+    assert [o["price"] for o in t["options"]] == [o["price"] for o in alex["options"]] and alex["priced_as"] is None
+    door = client.get("/api/search/freight", params={**LANE, "destination": "DOCAU", "equipment": "20DV",
+                                                     "weight_t": 5}).json()
+    assert "EGEDK" in {p["code"] for p in door["ports_checked"]}
+    opt = next(o for o in door["options"] if o["port"]["code"] == "EGEDK")
+    assert opt["trucking_priced_as"]["code"] == "EGALY" and opt["freight"]["carrier"] == "MSC"
+    assert opt["trucking"]["price"] == alex["options"][0]["price"]
+
+
+def test_adabiya_is_not_trucked_at_sokhna_prices(client):
+    r = client.get("/api/search/trucking", params={"port": "Adabya", "zone": "10th of Ramadan", "equipment": "40HC",
+                                                   "on": NOV}).json()
+    assert r["options"] == [] and r["priced_as"] is None
+
+
 def test_direction_prices(client, db):
     """Runs last: makes Ebad El Rahman's Alexandria -> 10th of Ramadan 40HC price import-only (15,500) and adds an
     export price (17,500), as a "15500 IMP-17500 EXP" cell would."""

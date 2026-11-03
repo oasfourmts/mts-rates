@@ -446,6 +446,11 @@ function TruckingTable({ r }: { r: TruckingResult }) {
           </tbody>
         </table>
       </div>
+      {r.priced_as && (
+        <p className="hint">
+          {r.origin.name} has no trucking prices of its own; {r.priced_as.name}'s prices apply.
+        </p>
+      )}
       <p className="fx">
         Buy prices, one-way trip{" "}
         {r.direction === "export" ? `from ${r.destination.name} to the port` : `from the port to ${r.destination.name}`}.
@@ -566,6 +571,7 @@ function DoorRow({ o, best, multi, open, toggle }: {
           <small>
             {t.trucker}
             {t.applies_to === "export" && ", export price"}
+            {o.trucking_priced_as && `, ${o.trucking_priced_as.name} price`}
             {o.other_truckers > 0 && `, cheapest of ${o.other_truckers + 1}`}
           </small>
         </td>

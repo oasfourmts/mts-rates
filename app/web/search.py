@@ -23,6 +23,9 @@ PER_UNIT = {"per_container", "per_trip"}        # multiplied by the number of co
 PER_BOOKING = {"per_bl", "per_shipment"}         # charged once
 LIGHT_LIMIT_T = Decimal("8")                     # 20DV under 8 t is "light"
 EXPIRY_WARNING_DAYS = 7
+# Ports with no trucking tab of their own that use another port's trucking prices (MTS, 3 Nov 2026).
+# El Dekheila is priced as Alexandria. Adabiya is not priced as Sokhna: it has no trucking prices yet.
+TRUCKING_PRICED_AS = {"EGEDK": "EGALY"}
 
 
 class SearchError(ValueError):
@@ -160,8 +163,9 @@ def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: 
     z = resolve_location(conn, zone, "inland destination")
     equipment = check_equipment(conn, equipment)
     wc = weight_class(equipment, weight_t)
+    priced = resolve_location(conn, TRUCKING_PRICED_AS[p.code], "port") if p.code in TRUCKING_PRICED_AS else p
     rows = conn.execute(text("SELECT * FROM search_trucking(:p, :z, :e, :w, :on, :d)"),
-                        {"p": p.code, "z": z.code, "e": equipment, "w": wc, "on": on, "d": direction}).mappings().all()
+                        {"p": priced.code, "z": z.code, "e": equipment, "w": wc, "on": on, "d": direction}).mappings().all()
     fx = latest_fx(conn, {r["currency"].strip() for r in rows}, on)
     options = []
     for r in rows:
@@ -176,7 +180,8 @@ def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: 
             "expiring_soon": days <= EXPIRY_WARNING_DAYS,
         })
     return {"mode": "trucking", "on": on, "origin": _loc(p), "destination": _loc(z), "equipment": equipment,
-            "weight_t": weight_t, "weight_class": wc, "direction": direction, "trips": trips, "fx": _fx_out(fx),
+            "weight_t": weight_t, "weight_class": wc, "direction": direction, "trips": trips,
+            "priced_as": _loc(priced) if priced is not p else None, "fx": _fx_out(fx),
             "options": options}
 
 
@@ -198,14 +203,20 @@ def search_door(conn: Connection, zone: str, destination: str, equipment: str, o
     if equipment == "20DV" and weight_t is None:
         raise SearchError("Enter the cargo weight: 20DV trucking is priced by weight (light is under 8 t).")
     via_loc = resolve_location(conn, via, "port") if via else None
-    ports = conn.execute(text(
+    priced_ports = conn.execute(text(
         "SELECT DISTINCT l.code, l.name FROM transport_rates tr "
         "JOIN rate_cards rc ON rc.id = tr.rate_card_id JOIN locations l ON l.id = tr.origin_id "
         "WHERE tr.destination_id = :z AND tr.equipment_code = :e AND tr.applies_to IN ('both', 'export') "
-        "  AND rc.status = 'active' "
-        "  AND :on BETWEEN rc.valid_from AND rc.valid_to AND (CAST(:via AS bigint) IS NULL OR l.id = :via) "
-        "ORDER BY l.code"),
-        {"z": z.id, "e": equipment, "on": on, "via": via_loc.id if via_loc else None}).all()
+        "  AND rc.status = 'active' AND :on BETWEEN rc.valid_from AND rc.valid_to ORDER BY l.code"),
+        {"z": z.id, "e": equipment, "on": on}).all()
+    have = {p.code for p in priced_ports}
+    ports = list(priced_ports)
+    for code, source in TRUCKING_PRICED_AS.items():       # e.g. El Dekheila, trucked at Alexandria's prices
+        if source in have:
+            ports.append(conn.execute(text("SELECT code, name FROM locations WHERE code = :c"), {"c": code}).one())
+    ports.sort(key=lambda p: p.code)
+    if via_loc:
+        ports = [p for p in ports if p.code == via_loc.code]
 
     options, fx, no_freight, wc = [], {}, [], weight_class(equipment, weight_t)
     for port in ports:
@@ -228,6 +239,7 @@ def search_door(conn: Connection, zone: str, destination: str, equipment: str, o
             total = None if missing else fo["total_usd"] + best_truck["total_usd"]
             options.append({
                 "port": {"code": port.code, "name": port.name}, "freight": fo, "trucking": best_truck,
+                "trucking_priced_as": truck["priced_as"],
                 "other_truckers": len(truck["options"]) - 1, "total_usd": total,
                 "per_container_usd": None if total is None else (total / containers).quantize(CENT, ROUND_HALF_UP),
                 "missing_fx": sorted(missing), "expiring_soon": fo["expiring_soon"] or best_truck["expiring_soon"],

@@ -12,6 +12,7 @@ Freight forwarder rate platform for MTS Logistics (Egypt). Read README.md for la
   Every column under an equipment group is a trucker (MTS, Ocean and Bayier are truckers too).
   A single price applies both ways: import delivery and export pickup (destination to port). A cell that
   names both, e.g. "15500 IMP-16000 EXP", gives one price per direction (`applies_to`; MTS, 3 Nov 2026).
+  El Dekheila uses Alexandria's trucking prices; Adabiya is not priced as Sokhna (MTS, 3 Nov 2026).
 - Freight prices are USD per container unless a cell names another currency.
 - Never overwrite a rate. Expire it and add a new rate card.
 - Never guess a value. If a cell cannot be read with confidence, record an import issue.

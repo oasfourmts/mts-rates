@@ -82,6 +82,7 @@ export interface TruckingResult extends SearchBase {
   weight_t: string | null;
   weight_class: string | null;
   direction: "import" | "export" | null;
+  priced_as: Place | null;
   trips: number;
   options: TruckingOption[];
 }
@@ -90,6 +91,7 @@ export interface DoorOption {
   port: Place;
   freight: FreightOption;
   trucking: TruckingOption;
+  trucking_priced_as: Place | null;
   other_truckers: number;
   total_usd: Money | null;
   per_container_usd: Money | null;
