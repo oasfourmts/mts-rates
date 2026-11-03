@@ -124,7 +124,11 @@ def normalise_carrier(raw: str) -> tuple[str, str, str, bool]:
     name = CARRIERS.get(key)
     if name:
         return name, match_key(name), rate_type, True
-    return display_name(key), key, rate_type, False
+    # Not on the known list: keep the sheet's own spelling ("NVOCC (Crew)", "EGL"), without a " Spot" suffix.
+    written = clean(raw)
+    if rate_type == "spot":
+        written = re.sub(r"\s+spot$", "", written, flags=re.I)
+    return written, key, rate_type, False
 
 
 def map_columns(header: list[str]) -> dict[str, int]:

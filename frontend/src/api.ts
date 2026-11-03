@@ -38,6 +38,7 @@ export interface FreightOption {
   missing_fx: string[];
   charges: Charge[];
   remarks: string | null;
+  sheet_notes: { severity: string; message: string; raw: string | null }[];
 }
 
 export interface TruckingOption {

@@ -143,6 +143,12 @@ table { border-collapse: collapse; width: 100%; }
 .ok { margin: 12px 0 0; color: var(--harbor); font-weight: 500; }
 .inline { font: inherit; color: var(--ink); background: var(--signal); border: 0; border-radius: 4px; padding: 2px 10px; cursor: pointer; }
 .fx-grid caption { text-align: left; padding: 0 0 8px; caption-side: top; }
+.note-flag { font: 500 13px var(--text); color: var(--alert); background: none; border: 0; padding: 0;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px; white-space: normal; text-align: right; }
+.sheet-notes { margin-top: 10px; font-size: 14px; color: var(--alert); max-width: 80ch; }
+.sheet-notes p { margin: 0 0 4px; font-weight: 500; }
+.sheet-notes ul { margin: 0; padding-left: 18px; }
+.sheet-notes q { color: var(--ink-soft); margin-left: 6px; }
 .remarks { margin: 8px 0 0; font-size: 14px; color: var(--ink-soft); max-width: 72ch; }
 
 @media (max-width: 680px) {

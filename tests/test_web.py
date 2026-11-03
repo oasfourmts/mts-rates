@@ -172,3 +172,17 @@ def test_search_runs_read_only(client, db):
 def test_expiring(client):
     rows = client.get("/api/rate-cards/expiring", params={"days": 7, "on": "2026-11-25"}).json()
     assert rows and all(r["days_left"] == 5 for r in rows)
+
+
+@pg_required
+def test_freight_result_carries_its_sheet_notes(client):
+    # Real sheet row (Izmir / Alexandria / 20'DV): OTHC 7800 and B/L 750 have no currency, so they were not
+    # imported. The 275 USD total must not look complete.
+    opt = client.get("/api/search/freight", params={"origin": "EGALY", "destination": "TRIZM", "equipment": "20DV",
+                                                    "on": NOV}).json()["options"][0]
+    assert opt["total_usd"] == "275.00"
+    assert {n["raw"] for n in opt["sheet_notes"]} >= {"7800", "750"}
+    assert all("not imported" in n["message"] for n in opt["sheet_notes"] if n["raw"] in ("7800", "750"))
+    other = client.get("/api/search/freight", params={"origin": "EGALY", "destination": "ITGOA", "equipment": "20DV",
+                                                      "on": NOV}).json()["options"]
+    assert all(o["sheet_notes"] == [] for o in other)

@@ -93,6 +93,7 @@ def search_freight(conn: Connection, origin: str, destination: str, equipment: s
     rows = conn.execute(text("SELECT * FROM search_freight(:o, :d, :e, :on)"),
                         {"o": pol.code, "d": pod.code, "e": equipment, "on": on}).mappings().all()
     names = dict(conn.execute(text("SELECT code, name FROM charge_codes")).all())
+    notes = sheet_notes(conn, [r["freight_rate_id"] for r in rows])
     fx = latest_fx(conn, {c["currency"] for r in rows for c in r["charges"]}, on)
 
     options = []
@@ -119,6 +120,7 @@ def search_freight(conn: Connection, origin: str, destination: str, equipment: s
             "total_usd": None if missing else total,
             "per_container_usd": None if missing else (total / containers).quantize(CENT, ROUND_HALF_UP),
             "missing_fx": sorted(missing), "charges": charges, "remarks": r["remarks"],
+            "sheet_notes": notes.get(r["freight_rate_id"], []),
         })
     options.sort(key=lambda o: (o["total_usd"] is None, o["total_usd"] or 0, _transit_sort(o["transit_days"])))
     return {"mode": "freight", "on": on, "origin": _loc(pol), "destination": _loc(pod), "equipment": equipment,
@@ -126,6 +128,22 @@ def search_freight(conn: Connection, origin: str, destination: str, equipment: s
 
 
 DIRECTIONS = ("import", "export")
+
+
+def sheet_notes(conn: Connection, freight_rate_ids: list[int]) -> dict[int, list[dict]]:
+    """What the import could not take from each offer's sheet row (a charge with no currency, text where an amount
+    was expected...). Shown with the result, so a total that leaves out a charge never looks complete."""
+    if not freight_rate_ids:
+        return {}
+    rows = conn.execute(text(
+        "SELECT fr.id, ii.severity, ii.message, ii.raw FROM freight_rates fr "
+        "JOIN rate_cards rc ON rc.id = fr.rate_card_id "
+        "JOIN import_issues ii ON ii.import_run_id = rc.import_run_id AND ii.row_ref = fr.source_row "
+        "WHERE fr.id = ANY(:ids) AND NOT ii.resolved ORDER BY ii.id"), {"ids": freight_rate_ids}).all()
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        out.setdefault(r.id, []).append({"severity": r.severity, "message": r.message, "raw": r.raw})
+    return out
 
 
 def search_trucking(conn: Connection, port: str, zone: str, equipment: str, on: date,

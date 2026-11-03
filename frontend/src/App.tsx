@@ -381,6 +381,7 @@ function FreightRow({ o, best, multi, open, toggle }: {
         </th>
         <td className="num total">
           {o.total_usd !== null ? money(o.total_usd) : <span className="warn">Needs {o.missing_fx.join(", ")} rate</span>}
+          <NotesFlag notes={o.sheet_notes} onOpen={toggle} open={open} />
         </td>
         {multi && <td className="num">{money(o.per_container_usd)}</td>}
         <td>{transit || <span className="muted">not given</span>}</td>
@@ -391,6 +392,7 @@ function FreightRow({ o, best, multi, open, toggle }: {
         <tr className="detail">
           <td colSpan={cols}>
             <Charges o={o} />
+            <SheetNotes notes={o.sheet_notes} />
             {o.remarks && <p className="remarks">{o.remarks}</p>}
           </td>
         </tr>
@@ -556,6 +558,7 @@ function DoorRow({ o, best, multi, open, toggle }: {
         </th>
         <td className="num total">
           {o.total_usd !== null ? money(o.total_usd) : <span className="warn">Needs {o.missing_fx.join(", ")} rate</span>}
+          <NotesFlag notes={f.sheet_notes} onOpen={toggle} open={open} />
         </td>
         {multi && <td className="num">{money(o.per_container_usd)}</td>}
         <td className="num">
@@ -580,10 +583,42 @@ function DoorRow({ o, best, multi, open, toggle }: {
               {t.weight_class && ` (${t.weight_class})`}, valid until {day(t.valid_to)}
             </p>
             <Charges o={f} />
+            <SheetNotes notes={f.sheet_notes} />
             {f.remarks && <p className="remarks">{f.remarks}</p>}
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+type Note = FreightOption["sheet_notes"][number];
+
+/** Under the total: the sheet row had something the import could not take, so the total may be short. */
+function NotesFlag({ notes, onOpen, open }: { notes: Note[]; onOpen: () => void; open: boolean }) {
+  if (!notes.length) return null;
+  return (
+    <small>
+      <button type="button" className="note-flag" onClick={onOpen} aria-expanded={open}>
+        {notes.length === 1 ? "1 sheet note" : `${notes.length} sheet notes`}: check before quoting
+      </button>
+    </small>
+  );
+}
+
+function SheetNotes({ notes }: { notes: Note[] }) {
+  if (!notes.length) return null;
+  return (
+    <div className="sheet-notes">
+      <p>Not included above, as written on the sheet:</p>
+      <ul>
+        {notes.map((n, i) => (
+          <li key={i}>
+            {n.message}
+            {n.raw && <q>{n.raw}</q>}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
