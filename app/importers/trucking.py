@@ -75,13 +75,49 @@ def parse_header(header: list[str], issues: list[Issue]) -> list[Column]:
     return columns
 
 
+def _group_end(cell: str) -> int | None:
+    for pattern, _ in GROUPS:
+        m = pattern.match(clean(cell))
+        if m:
+            return m.end()
+    return None
+
+
+def find_header(table: list[list[str]]) -> tuple[list[str], int] | None:
+    """The header as one row, plus the index of the first data row. Two layouts:
+    - the live sheet: the port in A1 (merged A1:A2), equipment groups on one row (each merged across its
+      trucker columns, so the text sits in the group's first cell) and trucker names on the row below;
+    - one row holding both, e.g. "20'DC < 8 tons MTS" (older CSV copies).
+    The live layout is joined column by column into the one-row form, so one header parser serves both."""
+    for g, row in enumerate(table[:10]):
+        starts = [i for i, c in enumerate(row) if i > 0 and _group_end(c) is not None]
+        if not starts:
+            continue
+        inline = any(clean(row[i])[_group_end(row[i]):].strip() for i in starts)
+        if inline or g + 1 >= len(table):
+            header, first_data = list(row), g + 1
+        else:
+            names = table[g + 1]
+            width = max(len(row), len(names))
+            cell = lambda r, i: r[i] if i < len(r) else ""  # noqa: E731
+            header = [" ".join(x for x in (clean(cell(row, i)), clean(cell(names, i))) if x) for i in range(width)]
+            first_data = g + 2
+        header[0] = next((clean(table[k][0]) for k in range(first_data) if table[k] and clean(table[k][0])), "")
+        return header, first_data
+    return None
+
+
 def parse(text: str, port_code: str | None = None) -> Result:
     result = Result()
     table = read_csv(text)
     if not table:
         result.issues.append(Issue("file", "skipped", "empty file"))
         return result
-    header = table[0]
+    found = find_header(table)
+    if found is None:
+        result.issues.append(Issue("header", "skipped", "no equipment group (e.g. 20'DC < 8 tons) in the first 10 rows"))
+        return result
+    header, first_data = found
     sheet_port = clean(header[0]).upper()
     if port_code is None:
         port_code = PORT_CODES.get(sheet_port)
@@ -90,7 +126,7 @@ def parse(text: str, port_code: str | None = None) -> Result:
             return result
     columns = parse_header(header, result.issues)
 
-    for r, row in enumerate(table[1:], start=2):
+    for r, row in enumerate(table[first_data:], start=first_data + 1):
         zone = clean(row[0]) if row else ""
         if not zone:
             continue

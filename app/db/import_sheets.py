@@ -76,7 +76,7 @@ def to_csv(rows: list[list[str]]) -> str:
 @dataclass
 class TabResult:
     tab: str
-    status: str          # imported, skipped, dry-run
+    status: str          # imported, skipped, dry-run, empty
     rows: int
     issues: int
 
@@ -86,7 +86,14 @@ def source_ref(sheet_id: str, tab: str, text: str) -> str:
 
 
 def already_imported(conn, ref: str) -> bool:
-    return conn.execute("SELECT 1 FROM import_runs WHERE source_ref = %s", (ref,)).fetchone() is not None
+    """Only a run that created rate cards counts: an earlier run that loaded nothing must not block a retry."""
+    return conn.execute(
+        "SELECT 1 FROM import_runs ir WHERE ir.source_ref = %s "
+        "AND EXISTS (SELECT 1 FROM rate_cards rc WHERE rc.import_run_id = ir.id)", (ref,)).fetchone() is not None
+
+
+class EmptyTab(RuntimeError):
+    """A tab produced no rows at all: its layout was not understood. Nothing from it is loaded."""
 
 
 def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = False,
@@ -110,7 +117,9 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
             parsed = freight.parse(text)
             script = lambda: freight.to_sql(parsed, source_ref=ref, direction="export")  # noqa: E731
         res = TabResult(tab, "dry-run", len(parsed.rows), len(parsed.issues))
-        if not dry_run:
+        if not parsed.rows:
+            res.status = "empty"
+        elif not dry_run:
             if already_imported(conn, ref):
                 res.status = "skipped"
             else:
@@ -122,6 +131,10 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
         if len(parsed.issues) > 5:
             log(f"           ... {len(parsed.issues) - 5} more in import_issues")
         results.append(res)
+    empty = [r.tab for r in results if r.status == "empty"]
+    if empty:
+        raise EmptyTab(f"no rates read from: {', '.join(empty)}. The tab layout was not understood (see the issues "
+                       "above); nothing from those tabs was loaded.")
     return results
 
 
@@ -137,7 +150,7 @@ def main(argv=None) -> int:
         fetch = sheets_fetcher()
         with psycopg.connect(conninfo(), autocommit=True) as conn:
             run(conn, fetch, date(y, m, 1), only=args.only, dry_run=args.dry_run, freight_tab=args.freight_tab)
-    except (SheetAccessError, psycopg.Error) as e:
+    except (SheetAccessError, EmptyTab, psycopg.Error) as e:
         print(f"IMPORT FAILED: {e}", file=sys.stderr)
         return 1
     except Exception as e:  # google-auth: no credentials, or the token request failed

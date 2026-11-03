@@ -54,12 +54,11 @@ def test_app_role_can_read_and_enter_fx_only(fresh):
 
 
 def fixture_fetch(sheet_id, tab):
+    """The fixture tabs, in the live sheet layout the Sheets API returns (multi-row headers, trimmed rows)."""
+    from tests.sheet_layout import freight_live, trucking_live
     files = {"ALEXANDRIA": "trucking_alexandria", "SOKHNA": "trucking_sokhna", "PSD EAST": "trucking_psd_east",
-             "DAMIETTA": "trucking_damietta", "November 2026": "freight_nov_2026"}
-    with open(ROOT / "tests" / "fixtures" / f"{files[tab]}.csv", newline="", encoding="utf-8") as fh:
-        rows = list(csv.reader(fh))
-    # The API leaves out trailing empty cells.
-    return [r[: max((i + 1 for i, c in enumerate(r) if c), default=0)] for r in rows]
+             "DAMIETTA": "trucking_damietta"}
+    return freight_live() if tab == "November 2026" else trucking_live(files[tab])
 
 
 def test_import_month_then_rerun_skips(fresh):
@@ -97,3 +96,19 @@ def test_cloud_run_connection_parts(monkeypatch):
     assert make_url(url).password == "p@ss/w:rd"
     assert make_url(url).query["host"] == "/cloudsql/mts-rates:europe-west1:mts-rates-db"
     assert "password='p@ss/w:rd'" in connect.conninfo() or "password=p@ss/w:rd" in connect.conninfo()
+
+
+def test_empty_tab_fails_and_does_not_block_a_retry(fresh):
+    name, conn = fresh
+    migrate.apply(conn, log=lambda *_: None)
+    # 3 Nov 2026: the first live run loaded 0 rows (header not understood) yet was recorded in import_runs.
+    psql(name, "INSERT INTO import_runs (source_kind, source_ref) VALUES ('sheet', 'placeholder')")
+    with pytest.raises(import_sheets.EmptyTab, match="ALEXANDRIA"):
+        import_sheets.run(conn, lambda s, t: [["ALEXANDRIA"], ["", "nothing here"]], date(2026, 11, 1),
+                          only="trucking", log=lambda *_: None)
+    assert psql(name, "SELECT count(*) FROM rate_cards") == "0"
+    text = import_sheets.to_csv(fixture_fetch(None, "ALEXANDRIA"))
+    ref = import_sheets.source_ref(import_sheets.TRUCKING_SHEET, "ALEXANDRIA", text)
+    conn.execute("INSERT INTO import_runs (source_kind, source_ref) VALUES ('sheet', %s)", (ref,))  # empty earlier run
+    res = import_sheets.run(conn, fixture_fetch, date(2026, 11, 1), only="trucking", log=lambda *_: None)
+    assert res[0].status == "imported" and int(psql(name, "SELECT count(*) FROM transport_rates")) > 100
