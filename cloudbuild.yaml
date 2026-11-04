@@ -1,0 +1,11 @@
+# Builds the MTS Rates image inside Google Cloud and pushes it to Artifact Registry.
+# Used by setup/deploy.sh (the default since 4 Nov 2026, when Cloud Shell could not reach the registry):
+#   gcloud builds submit --config=cloudbuild.yaml --substitutions=_IMAGE=<registry>/app:<version> ...
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+images:
+  - "${_IMAGE}"
+options:
+  logging: CLOUD_LOGGING_ONLY   # required with a user-specified build service account
+timeout: 1200s

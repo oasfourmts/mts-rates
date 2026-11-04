@@ -1,0 +1,6 @@
+# What `gcloud builds submit` uploads: the repo, minus these.
+.git
+.gitignore
+#!include:.gitignore
+tests/
+setup/

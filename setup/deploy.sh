@@ -5,6 +5,7 @@
 #   ADMIN_EMAILS="you@mtslogistics.net" bash setup/deploy.sh
 #
 # Safe to run again: every step checks what exists first. A rerun builds the current code and redeploys it.
+# The image is built in Cloud Build by default; BUILD_WITH=docker builds it here with Docker instead.
 # Creates: Artifact Registry repo, Cloud SQL Postgres 16 (+ database and owner role), two generated database
 # passwords in Secret Manager, a service account for the web app, the Cloud Run jobs mts-rates-migrate and
 # mts-rates-import, and the Cloud Run service mts-rates behind IAP (only @mtslogistics.net can open it).
@@ -38,7 +39,9 @@ ACTIVE=$(gcloud config get-value account 2>/dev/null)
 gcloud config set project "$PROJECT_ID" >/dev/null
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 gcloud iam service-accounts describe "$AGENT_SA" >/dev/null 2>&1 || fail "$AGENT_SA not found. Run setup/setup_access.sh first."
-command -v docker >/dev/null || fail "docker is not available (Cloud Shell has it; on another machine install Docker)"
+BUILD_WITH="${BUILD_WITH:-cloudbuild}"   # cloudbuild (default): built inside Google Cloud; docker: built here
+[[ "$BUILD_WITH" == cloudbuild || "$BUILD_WITH" == docker ]] || fail "BUILD_WITH must be cloudbuild or docker"
+[[ "$BUILD_WITH" == cloudbuild ]] || command -v docker >/dev/null || fail "docker is not available here"
 
 if [[ -z "${ADMIN_EMAILS:-}" ]]; then
   read -rp "Who may enter exchange rates? Comma-separated @$COMPANY_DOMAIN emails [$ACTIVE]: " ADMIN_EMAILS
@@ -58,23 +61,47 @@ echo "Admins: $ADMIN_EMAILS"
 # --- 1. APIs -------------------------------------------------------------------------------------------------
 step "Enabling APIs"
 gcloud services enable run.googleapis.com sqladmin.googleapis.com artifactregistry.googleapis.com \
-  secretmanager.googleapis.com iap.googleapis.com sheets.googleapis.com iamcredentials.googleapis.com
+  secretmanager.googleapis.com iap.googleapis.com sheets.googleapis.com iamcredentials.googleapis.com \
+  cloudbuild.googleapis.com
 
-# --- 2. Container image (built here with Docker, pushed to Artifact Registry) --------------------------------
-step "Building $IMAGE"
+# --- 2. Container image -------------------------------------------------------------------------------------
+step "Building $IMAGE ($BUILD_WITH)"
 if ! gcloud artifacts repositories describe mts-rates --location="$REGION" >/dev/null 2>&1; then
   gcloud artifacts repositories create mts-rates --repository-format=docker --location="$REGION" \
     --description="MTS Rates images"
 fi
-gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet >/dev/null
-docker build -t "$IMAGE" .
-# Cloud Shell's connection to the registry sometimes drops; retry before giving up.
-for attempt in 1 2 3 4 5; do
-  if docker push "$IMAGE"; then break; fi
-  [[ $attempt == 5 ]] && fail "could not upload the image to $REPO after 5 tries. Check: curl -sI https://$REGION-docker.pkg.dev/v2/ (a 401 means the registry is reachable)"
-  echo "upload failed (try $attempt of 5), retrying in $((attempt * 10))s..."
-  sleep $((attempt * 10))
-done
+if gcloud artifacts docker images describe "$IMAGE" >/dev/null 2>&1; then
+  echo "image $VERSION is already in the registry; not rebuilding"
+elif [[ "$BUILD_WITH" == cloudbuild ]]; then
+  # Built inside Google Cloud, so nothing has to travel from Cloud Shell to the registry (on 4 Nov 2026 Cloud
+  # Shell's pushes were refused). Runs as rates-build, which can only push images, read the uploaded source
+  # and write build logs.
+  BUILD_SA="rates-build@$PROJECT_ID.iam.gserviceaccount.com"
+  gcloud iam service-accounts describe "$BUILD_SA" >/dev/null 2>&1 || \
+    gcloud iam service-accounts create rates-build --display-name="MTS Rates image builds"
+  for ROLE in roles/logging.logWriter roles/storage.objectViewer; do
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BUILD_SA" \
+      --role="$ROLE" --condition=None >/dev/null
+  done
+  gcloud artifacts repositories add-iam-policy-binding mts-rates --location="$REGION" \
+    --member="serviceAccount:$BUILD_SA" --role=roles/artifactregistry.writer >/dev/null
+  echo "uploading the code and building in Cloud Build (about 3 minutes)..."
+  if ! gcloud builds submit . --region="$REGION" --config=cloudbuild.yaml --substitutions="_IMAGE=$IMAGE" \
+      --service-account="projects/$PROJECT_ID/serviceAccounts/$BUILD_SA" \
+      --default-buckets-behavior=regional-user-owned-bucket --suppress-logs; then
+    fail "the build failed. Logs: gcloud builds list --region=$REGION --limit=1, then gcloud builds log <ID> --region=$REGION"
+  fi
+else
+  gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet >/dev/null
+  docker build -t "$IMAGE" .
+  # Cloud Shell's connection to the registry sometimes drops; retry before giving up.
+  for attempt in 1 2 3 4 5; do
+    if docker push "$IMAGE"; then break; fi
+    [[ $attempt == 5 ]] && fail "could not upload the image after 5 tries. Run again without BUILD_WITH=docker to build in Cloud Build."
+    echo "upload failed (try $attempt of 5), retrying in $((attempt * 10))s..."
+    sleep $((attempt * 10))
+  done
+fi
 
 # --- 3. Database passwords (generated once, never printed) ----------------------------------------------------
 step "Database passwords in Secret Manager"
