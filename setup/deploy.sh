@@ -28,6 +28,17 @@ REPO="$REGION-docker.pkg.dev/$PROJECT_ID/mts-rates"
 IMPORT_MONTH="${IMPORT_MONTH:-$(TZ=Africa/Cairo date +%Y-%m)}"   # SKIP_IMPORT=1 to skip the sheet import
 
 step() { echo; echo "==> $*"; }
+# A service account created a moment ago can take up to a minute to be usable in IAM bindings
+# (4 Nov 2026: "Service account ... does not exist" right after it was created). Retry until it is.
+retry() {
+  local attempt
+  for attempt in 1 2 3 4 5 6; do
+    if "$@" >/dev/null 2>&1; then return 0; fi
+    echo "  not ready yet (try $attempt of 6), waiting $((attempt * 5))s..."
+    sleep $((attempt * 5))
+  done
+  "$@"   # last try, showing the error
+}
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
 cd "$(dirname "$0")/.."
@@ -80,11 +91,11 @@ elif [[ "$BUILD_WITH" == cloudbuild ]]; then
   gcloud iam service-accounts describe "$BUILD_SA" >/dev/null 2>&1 || \
     gcloud iam service-accounts create rates-build --display-name="MTS Rates image builds"
   for ROLE in roles/logging.logWriter roles/storage.objectViewer; do
-    gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BUILD_SA" \
-      --role="$ROLE" --condition=None >/dev/null
+    retry gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BUILD_SA" \
+      --role="$ROLE" --condition=None
   done
-  gcloud artifacts repositories add-iam-policy-binding mts-rates --location="$REGION" \
-    --member="serviceAccount:$BUILD_SA" --role=roles/artifactregistry.writer >/dev/null
+  retry gcloud artifacts repositories add-iam-policy-binding mts-rates --location="$REGION" \
+    --member="serviceAccount:$BUILD_SA" --role=roles/artifactregistry.writer
   echo "uploading the code and building in Cloud Build (about 3 minutes)..."
   if ! gcloud builds submit . --region="$REGION" --config=cloudbuild.yaml --substitutions="_IMAGE=$IMAGE" \
       --service-account="projects/$PROJECT_ID/serviceAccounts/$BUILD_SA" \
@@ -140,11 +151,11 @@ echo "connection $CONN, owner role $OWNER_ROLE"
 step "Service accounts"
 gcloud iam service-accounts describe "$WEB_SA" >/dev/null 2>&1 || \
   gcloud iam service-accounts create "$WEB_SA_NAME" --display-name="MTS Rates web app"
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$WEB_SA" \
-  --role=roles/cloudsql.client --condition=None >/dev/null
+retry gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$WEB_SA" \
+  --role=roles/cloudsql.client --condition=None
 # The web app can read only its own password; rates-agent (the jobs) already reads secrets and uses Cloud SQL.
-gcloud secrets add-iam-policy-binding db-app-password --member="serviceAccount:$WEB_SA" \
-  --role=roles/secretmanager.secretAccessor >/dev/null
+retry gcloud secrets add-iam-policy-binding db-app-password --member="serviceAccount:$WEB_SA" \
+  --role=roles/secretmanager.secretAccessor
 echo "web app runs as $WEB_SA; jobs run as $AGENT_SA"
 
 JOB_FLAGS=(--image="$IMAGE" --region="$REGION" --service-account="$AGENT_SA" --set-cloudsql-instances="$CONN"
