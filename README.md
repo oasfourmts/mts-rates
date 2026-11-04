@@ -73,6 +73,7 @@ runs migrations, deploys the app behind IAP and imports the current month's shee
 code. Share both rate sheets with `rates-agent@mts-rates.iam.gserviceaccount.com` (Viewer) for the import.
 Import another month: `gcloud run jobs execute mts-rates-import --region=europe-west1 --wait
 --args=-m,app.db.import_sheets,--month,2026-12`.
+Add `,--dry-run` to review first, or `,--reload` to load unchanged tabs again after an importer change.
 
 | Piece | Runs as | Database role |
 | --- | --- | --- |

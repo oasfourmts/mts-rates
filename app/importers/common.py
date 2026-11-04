@@ -84,6 +84,39 @@ def parse_money(cell: str | None) -> Money | None:
     return Money(Decimal(m.group("num").replace(",", "")), currency, text)
 
 
+def parse_money_sum(cell: str | None) -> list[Money] | None:
+    """'5850 EGP + 20 USD', '151$ + 700 EGP' -> one Money per part. Only when the cell is two or more amounts
+    joined by '+' and every part names its currency; anything else (e.g. '10$ / 400 EGP') returns None."""
+    parts = [x.strip() for x in clean(cell).split("+")]
+    if len(parts) < 2 or any(not x for x in parts):
+        return None
+    out = []
+    for part in parts:
+        try:
+            money = parse_money(part)
+        except ValueError:
+            return None
+        if money is None or money.currency is None:
+            return None
+        out.append(money)
+    return out
+
+
+def parse_labelled_list(cell: str | None) -> list[tuple[str, Money]] | None:
+    """'Manifest 35 USD; Doc 15 USD' -> [('Manifest', 35 USD), ('Doc', 15 USD)]. Every part must be a label and
+    an amount with its currency; otherwise None."""
+    parts = [x.strip() for x in clean(cell).split(";") if x.strip()]
+    if len(parts) < 2:
+        return None
+    out = []
+    for part in parts:
+        labelled = parse_labelled_money(part)
+        if not labelled or labelled[1].currency is None:
+            return None
+        out.append(labelled)
+    return out
+
+
 _LABELLED_MONEY = re.compile(r"^(?P<label>[A-Za-z][A-Za-z /.&-]*?)[:\s]+(?P<money>.*?)(?:\s*/\s*CNTR)?$", re.I)
 
 

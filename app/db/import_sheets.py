@@ -123,7 +123,9 @@ class EmptyTab(RuntimeError):
 
 
 def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = False,
-        freight_tab: str | None = None, log=print) -> list[TabResult]:
+        freight_tab: str | None = None, reload: bool = False, log=print) -> list[TabResult]:
+    """reload=True loads every tab again even if its contents are unchanged (e.g. after the importer learned to
+    read more cells); the earlier load for the month is still expired first, so nothing is counted twice."""
     first = month.replace(day=1)
     last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
     results = []
@@ -147,7 +149,7 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
         if not parsed.rows:
             res.status = "empty"
         elif not dry_run:
-            if already_imported(conn, ref):
+            if not reload and already_imported(conn, ref):
                 res.status = "skipped"
             else:
                 res.replaced = active_cards(conn, key)
@@ -177,12 +179,14 @@ def main(argv=None) -> int:
     ap.add_argument("--only", choices=("trucking", "freight"))
     ap.add_argument("--freight-tab", help='tab name if not like "November 2026"')
     ap.add_argument("--dry-run", action="store_true", help="read and parse, write nothing")
+    ap.add_argument("--reload", action="store_true", help="load tabs again even if unchanged since the last import")
     args = ap.parse_args(argv)
     y, m = (int(x) for x in args.month.split("-"))
     try:
         fetch = sheets_fetcher()
         with psycopg.connect(conninfo(), autocommit=True) as conn:
-            run(conn, fetch, date(y, m, 1), only=args.only, dry_run=args.dry_run, freight_tab=args.freight_tab)
+            run(conn, fetch, date(y, m, 1), only=args.only, dry_run=args.dry_run, freight_tab=args.freight_tab,
+                reload=args.reload)
     except (SheetAccessError, EmptyTab, psycopg.Error) as e:
         print(f"IMPORT FAILED: {e}", file=sys.stderr)
         return 1

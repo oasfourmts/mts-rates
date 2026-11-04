@@ -147,3 +147,16 @@ def test_changed_tab_replaces_its_earlier_import_for_the_month(fresh):
     dec = import_sheets.run(conn, changed, date(2026, 12, 1), only="trucking", log=lambda *_: None)
     assert [r.status for r in dec] == ["imported"] * 4 and all(r.replaced == 0 for r in dec)
     assert psql(name, active) == str(2 * int(before))         # November untouched, December added
+
+
+def test_reload_replaces_an_unchanged_tab(fresh):
+    name, conn = fresh
+    migrate.apply(conn, log=lambda *_: None)
+    nov = date(2026, 11, 1)
+    import_sheets.run(conn, fixture_fetch, nov, only="freight", log=lambda *_: None)
+    again = import_sheets.run(conn, fixture_fetch, nov, only="freight", log=lambda *_: None)
+    assert again[0].status == "skipped"
+    reloaded = import_sheets.run(conn, fixture_fetch, nov, only="freight", reload=True, log=lambda *_: None)
+    assert reloaded[0].status == "imported" and reloaded[0].replaced > 0
+    assert psql(name, "SELECT count(*) FROM freight_rates fr JOIN rate_cards rc ON rc.id = fr.rate_card_id "
+                      "WHERE rc.status = 'active'") == "18"

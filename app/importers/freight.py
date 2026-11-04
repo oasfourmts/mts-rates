@@ -17,7 +17,8 @@ from decimal import Decimal
 
 from . import sqlout
 from .common import (Issue, Money, Result, clean, display_name, is_blank, match_key, parse_date,
-                     parse_labelled_money, parse_money, parse_range, read_csv)
+                     parse_labelled_list, parse_labelled_money, parse_money, parse_money_sum,
+                     parse_range, read_csv)
 
 DEFAULT_CURRENCY = "USD"
 
@@ -238,10 +239,20 @@ def _parse_row(get, ref: str, carrier_raw: str, issues: list[Issue]) -> FreightO
         raw = get(code)
         if is_blank(raw):
             continue
+        basis = "per_bl" if code == "BL" else "per_container"
         label = None
         try:
             money = parse_money(raw)
         except ValueError:
+            # Several amounts in one cell, each with its currency: one charge each (sheet rules, 3 Nov 2026).
+            parts = [(None, m) for m in parse_money_sum(raw) or []]
+            if not parts and code == "OTHER":
+                parts = parse_labelled_list(raw) or []
+            if parts:
+                for part_label, part in parts:
+                    offer.charges.append(Charge(code, part.amount, part.currency, basis,
+                                                clean(raw) + (f" ({part_label})" if part_label else "")))
+                continue
             labelled = parse_labelled_money(raw) if code == "OTHER" else None
             if not labelled:
                 warn(f"{code} cell is not an amount; kept in remarks", raw)
@@ -252,7 +263,6 @@ def _parse_row(get, ref: str, carrier_raw: str, issues: list[Issue]) -> FreightO
         if code in USD_CEILING and money.currency is None and money.amount > USD_CEILING[code]:
             warn(f"{code} {money.amount} has no currency and is too high for USD; probably EGP, not imported", raw)
             continue
-        basis = "per_bl" if code == "BL" else "per_container"
         offer.charges.append(Charge(code, money.amount, currency, basis, clean(raw) + (f" ({label})" if label else "")))
 
     try:

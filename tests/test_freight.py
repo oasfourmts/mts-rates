@@ -1,6 +1,8 @@
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from app.importers import freight
 
 FIX = Path(__file__).parent / "fixtures"
@@ -122,3 +124,39 @@ def test_adabiya_is_a_port_of_loading():
     from app.importers.freight import POL_CODES
     from app.importers.common import match_key
     assert POL_CODES[match_key("Adabya")] == "EGADA" == POL_CODES[match_key("Al Adabiyah")]
+
+
+def _offer_with(**cells):
+    """One live-layout freight row (Beirut / Alexandria 20'DV, as on the sheet) with some cells replaced."""
+    from tests.sheet_layout import freight_live, to_text
+    rows = freight_live()
+    names = [c.strip() for c in rows[3]]
+    row = next(r for r in rows[4:] if len(r) > 6 and r[1].strip() == "Beirut" and r[4].strip() == "Alexandria"
+               and r[5].strip() == "20'DV")
+    row += [""] * (len(names) - len(row))
+    for key, value in cells.items():
+        col = next(i for i, n in enumerate(names) if n.lower().startswith(key))
+        row[col] = value
+    res = freight.parse(to_text(rows))
+    offer = next(o for o in res.rows if o.pod_code == "LBBEY" and o.pol_code == "EGALY" and o.equipment == "20DV")
+    return offer, [i for i in res.issues if i.row_ref == offer.row_ref]
+
+
+def test_amounts_joined_by_plus_are_separate_charges():
+    offer, issues = _offer_with(othc="5850 EGP + 20 USD")
+    othc = sorted((c.amount, c.currency) for c in offer.charges if c.code == "OTHC")
+    assert othc == [(20, "USD"), (5850, "EGP")]
+    assert not any("OTHC" in i.message for i in issues)
+
+
+@pytest.mark.parametrize("cell", ["10$ / 400 EGP", "5850 + 20 USD"])
+def test_unclear_multi_amount_cells_stay_flagged(cell):
+    offer, issues = _offer_with(othc=cell)
+    assert not any(c.code == "OTHC" for c in offer.charges)
+    assert any(i.raw == cell for i in issues)
+
+
+def test_other_surcharges_list_gives_one_charge_per_fee():
+    offer, _ = _offer_with(**{"other surcharges": "Manifest 35 USD; Doc 15 USD"})
+    other = sorted((c.raw.rsplit("(", 1)[-1].rstrip(")"), c.amount) for c in offer.charges if c.code == "OTHER")
+    assert other == [("Doc", 15), ("Manifest", 35)]
