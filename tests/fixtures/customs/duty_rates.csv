@@ -1,0 +1,7 @@
+Duty rates by HS code
+"One row per HS code, from the official tariff at customs.gov.eg/Services/Tarif. Rates are percentages (40 = 40%). Agreement columns: the preferential rate with a valid certificate; leave blank if the general rate applies. Always fill in the source and the date you checked it."
+
+Row status,HS code (10 digits),Description,General duty %,Schedule tax (ضريبة الجدول),VAT %,EU %,UK %,EFTA %,Turkey %,Agadir %,GAFTA %,COMESA %,Mercosur %,AfCFTA %,Import controls (document codes),Source and date checked,Remarks
+Example,6109100000,"T-shirts and vests, knitted, of cotton",40,,14,,,,,,,,,,GOEIC,"gomruky.com, Aug 2026: confirm on customs.gov.eg",Example only
+Example,8418100090,Combined refrigerator-freezers,60,Yes: see tariff,14,,,,,,,,,,GOEIC,"gomruky.com, Aug 2026: confirm on customs.gov.eg",Example only
+Example,8517130000,Smartphones,10,,14,,,,,,,,,,NTRA,"gomruky.com, Aug 2026: confirm on customs.gov.eg",Example only

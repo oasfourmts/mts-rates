@@ -18,6 +18,8 @@ Plan: see the "MTS Rate Management Platform — Plan" doc. Roadmap deck: "MTS Ra
 | `tests/` | Unit tests (pure Python) and database tests (need `psql` and a Postgres server) |
 | `tests/fixtures/` | Real rows copied from the legacy sheets |
 | `app/db/` | Cloud Run jobs: `migrate` (schema, functions, app role) and `import_sheets` (one month of the sheets) |
+| `templates/` | Sheets MTS fills in for the app, e.g. the customs clearance rate sheet |
+| `tools/` | Scripts that build the templates |
 | `setup/` | Google Cloud scripts, run in Cloud Shell: `setup_access.sh` once, then `deploy.sh` |
 
 ## Phase 1 status
@@ -32,7 +34,8 @@ Plan: see the "MTS Rate Management Platform — Plan" doc. Roadmap deck: "MTS Ra
 - [x] Rate Search screen
 - [ ] Other screens: Rate Cards, Bulk Import, Customs Matrix, Expiry Dashboard, Admin
 - [x] Deploy script: Cloud Run behind IAP, Cloud SQL Postgres 16, migrate and import jobs (`setup/deploy.sh`)
-- [ ] Customs clearance importer (sheet in progress at MTS)
+- [x] Customs clearance sheet (`templates/MTS_Customs_Clearance_Rates.xlsx`, built by `tools/build_customs_sheet.py`) and its importer (`app/importers/customs.py`)
+- [ ] Customs Matrix screen and customs in Rate Search
 - [x] Read the sheets directly with the `rates-agent` service account (`app/db/import_sheets.py`)
 
 ## Running the importers
@@ -74,6 +77,11 @@ code. Share both rate sheets with `rates-agent@mts-rates.iam.gserviceaccount.com
 Import another month: `gcloud run jobs execute mts-rates-import --region=europe-west1 --wait
 --args=-m,app.db.import_sheets,--month,2026-12`.
 Add `,--dry-run` to review first, or `,--reload` to load unchanged tabs again after an importer change.
+
+Customs clearance sheet: the pricing team fills in `templates/MTS_Customs_Clearance_Rates.xlsx` (uploaded to Google
+Drive as a Google Sheet and shared with rates-agent). Import it with
+`--args=-m,app.db.import_sheets,--customs,<SHEET_ID>` (add `,--dry-run` first). Only rows with Row status Active
+are loaded; duty rates and the reference tabs update in place, clearance fees become rate cards.
 
 | Piece | Runs as | Database role |
 | --- | --- | --- |

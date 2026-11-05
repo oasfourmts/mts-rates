@@ -30,7 +30,7 @@ from urllib.parse import quote
 import psycopg
 
 from app.db.connect import conninfo
-from app.importers import freight, sqlout, trucking
+from app.importers import customs, freight, sqlout, trucking
 from app.importers.common import clean
 
 TRUCKING_SHEET = os.environ.get("TRUCKING_SHEET_ID", "1t8rVYcNeku5JZG7vEfXAAoj-prAFdgGAheVs_byg2xI")
@@ -173,20 +173,58 @@ def run(conn, fetch, month: date, *, only: str | None = None, dry_run: bool = Fa
     return results
 
 
+def run_customs(conn, fetch, sheet_id: str, *, dry_run: bool = False, reload: bool = False, log=print) -> TabResult:
+    """The pricing team's customs clearance sheet (templates/MTS_Customs_Clearance_Rates.xlsx), all tabs at once.
+    Reference data (duty rates, agreements, countries, purposes, documents) is updated in place; clearance fees
+    become rate cards, and a changed sheet expires the fee cards of its earlier import."""
+    texts = {tab: to_csv(fetch(sheet_id, tab)) for tab in customs.TAB_NAMES}
+    digest = hashlib.sha256("\x1e".join(texts[t] for t in customs.TAB_NAMES).encode()).hexdigest()[:16]
+    key = f"sheet {sheet_id} customs"
+    ref = f"{key} sha256:{digest}"
+    parsed = customs.parse(texts)
+    rows = len(parsed.fees) + len(parsed.duty_rates)
+    res = TabResult("customs", "dry-run", rows, len(parsed.issues))
+    if not (rows or parsed.agreements or parsed.purposes or parsed.documents):
+        res.status = "empty"
+    elif not dry_run:
+        if not reload and already_imported(conn, ref):
+            res.status = "skipped"
+        else:
+            res.replaced = active_cards(conn, key)
+            sql = customs.to_sql(parsed, source_ref=ref)
+            conn.execute("BEGIN;\n" + supersede_sql(key) + sql[len("BEGIN;"):])
+            res.status = "imported"
+    log(f"customs  {res.status:9} {len(parsed.fees)} fee(s), {len(parsed.duty_rates)} HS code(s), "
+        f"{len(parsed.agreements)} agreement(s), {len(parsed.countries)} countries, {len(parsed.purposes)} purposes, "
+        f"{len(parsed.documents)} documents; {parsed.skipped_rows} Draft/Example row(s) not loaded; "
+        f"{res.issues} issue(s)" + (f"; replaces {res.replaced} earlier rate card(s)" if res.replaced else ""))
+    for i in (parsed.issues if dry_run else parsed.issues[:20]):
+        log(f"           [{i.severity}] {i.row_ref}: {i.message}" + (f" ({clean(i.raw)})" if i.raw else ""))
+    if res.status == "empty":
+        raise EmptyTab("nothing read from the customs sheet: check the tab names and headers (see the issues above)")
+    return res
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Import one month of the legacy rate sheets")
-    ap.add_argument("--month", required=True, help="e.g. 2026-11")
+    ap.add_argument("--month", help="e.g. 2026-11 (trucking and freight sheets)")
+    ap.add_argument("--customs", metavar="SHEET_ID", help="import the customs clearance sheet with this ID instead")
     ap.add_argument("--only", choices=("trucking", "freight"))
     ap.add_argument("--freight-tab", help='tab name if not like "November 2026"')
     ap.add_argument("--dry-run", action="store_true", help="read and parse, write nothing")
     ap.add_argument("--reload", action="store_true", help="load tabs again even if unchanged since the last import")
     args = ap.parse_args(argv)
-    y, m = (int(x) for x in args.month.split("-"))
+    if not args.customs and not args.month:
+        ap.error("give --month (trucking and freight) or --customs SHEET_ID")
     try:
         fetch = sheets_fetcher()
         with psycopg.connect(conninfo(), autocommit=True) as conn:
-            run(conn, fetch, date(y, m, 1), only=args.only, dry_run=args.dry_run, freight_tab=args.freight_tab,
-                reload=args.reload)
+            if args.customs:
+                run_customs(conn, fetch, args.customs, dry_run=args.dry_run, reload=args.reload)
+            else:
+                y, m = (int(x) for x in args.month.split("-"))
+                run(conn, fetch, date(y, m, 1), only=args.only, dry_run=args.dry_run, freight_tab=args.freight_tab,
+                    reload=args.reload)
     except (SheetAccessError, EmptyTab, psycopg.Error) as e:
         print(f"IMPORT FAILED: {e}", file=sys.stderr)
         return 1

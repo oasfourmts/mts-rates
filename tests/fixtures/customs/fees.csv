@@ -1,0 +1,8 @@
+Clearance fees
+"One row per fee. The app imports rows with status Active. ""Any"" / ""All"" / a blank value band = applies to everything. A row for a specific port, shipment type or HS chapter replaces the general row for the same fee item. For ""% of invoice value"", Amount is the percent (0.5 = 0.5%). Grey columns are the calculator's: don't edit them."
+
+Row status,Direction,Clearance point,Shipment type,Purpose,HS chapter (2 digits or All),Invoice value from (USD),Invoice value to (USD),Fee item,Basis,Amount,Currency,Minimum (same currency),Broker / supplier,Valid from,Valid to,"Documents (codes, ; between)",Remarks
+Example,Import,Any,FCL,Commercial import,All,,,Clearance fee,Per shipment,4500,EGP,,,2026-11-01,2026-11-30,CI;PL;BL;ACID;CO;IMP;TAX;POA,Example only: replace with your broker's price
+Example,Import,Any,FCL,Commercial import,84,,,Clearance fee,Per shipment,6000,EGP,,,2026-11-01,2026-11-30,CI;PL;BL;ACID;CO;IMP;TAX;POA;GOEIC,Example only: machinery (chapter 84) replaces the general clearance fee
+Example,Import,Any,Any,Commercial import,All,,,Extra HS line,Per HS line,150,EGP,,,2026-11-01,2026-11-30,,Example only
+Example,Import,Any,Air,Commercial import,All,0,5000,Clearance fee,% of invoice value,0.5,USD,50,,2026-11-01,2026-11-30,CI;PL;BL;ACID;CO;IMP;TAX;POA,"Example only: air shipments under USD 5,000 invoice value"

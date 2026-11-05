@@ -1,0 +1,13 @@
+Trade agreements
+"Agreements that can lower the import duty when the goods have a valid certificate of origin. The code must match a column on the Duty Rates tab. Pricing: confirm each row and set ""Checked by pricing"" to Yes."
+
+Code,Agreement,Partners,Certificate needed,Checked by pricing,Notes
+EU,EU-Egypt Association Agreement,The 27 EU member states,EUR1,No,In force since 1 June 2004
+UK,UK-Egypt Association Agreement,United Kingdom,EUR1,No
+EFTA,EFTA-Egypt Free Trade Agreement,"Iceland, Liechtenstein, Norway, Switzerland",EUR1,No
+Turkey,Turkey-Egypt Free Trade Agreement,Turkey,EUR1,No
+Agadir,Agadir Agreement,"Jordan, Morocco, Tunisia",EUR1,No,Confirm the certificate type
+GAFTA,Greater Arab Free Trade Area,Arab League members in GAFTA,CO-ARAB,No,Confirm the member list on the Countries tab
+COMESA,COMESA Free Trade Area,COMESA members in the free trade area,CO-COMESA,No,Not every COMESA member is in the free trade area: confirm
+Mercosur,Egypt-Mercosur Free Trade Agreement,"Argentina, Brazil, Paraguay, Uruguay",CO,No,Confirm the certificate type
+AfCFTA,African Continental Free Trade Area,AfCFTA members,CO,No,Confirm whether Egypt applies AfCFTA rates yet

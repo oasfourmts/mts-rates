@@ -1,0 +1,21 @@
+Documents
+Codes used in the Documents columns. Add a row for a new document; keep codes short and unique.
+
+Code,Document,Issued by,Notes
+CI,Commercial invoice,Shipper,Values must match the customs declaration and the ACI filing
+PL,Packing list,Shipper
+BL,Bill of lading / air waybill,Carrier
+ACID,ACID number (Advance Cargo Information),"Importer, through Nafeza",Filed before shipment
+CO,Certificate of origin,Chamber of commerce in the origin country
+EUR1,EUR.1 / EUR-MED movement certificate,Origin customs or chamber,"For EU, UK, EFTA and Turkey preferences"
+CO-ARAB,Arab certificate of origin (GAFTA),Origin chamber of commerce,For GAFTA preference
+CO-COMESA,COMESA certificate of origin,Origin authority,For COMESA preference
+IMP,Importers register card,Importer
+TAX,Tax card and commercial register,Importer
+POA,Power of attorney to the broker (توكيل),Importer
+GOEIC,GOEIC inspection / factory registration,GOEIC,Goods subject to quality control
+NFSA,NFSA release,National Food Safety Authority,Food
+EDA,EDA approval,Egyptian Drug Authority,"Medicines, medical devices, cosmetics"
+NTRA,NTRA approval,National Telecom Regulatory Authority,Telecom and wireless devices
+GUAR,Bank guarantee or cash deposit,Importer's bank,"Temporary admission, re-export"
+FZ,Free zone approval,GAFI,Free zone cargo

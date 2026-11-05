@@ -1,0 +1,11 @@
+Purposes of the goods
+"Each purpose has its own fees, duty treatment and documents. Pricing: check the last two columns and set ""Checked by pricing"" to Yes. The calculator uses ""Duties at clearance""."
+
+Purpose,Arabic,When it applies,Duties at clearance,Documents,Checked by pricing,Notes
+Commercial import,استيراد تجاري,Goods imported for sale or use in Egypt,Yes,CI;PL;BL;ACID;CO;IMP;TAX;POA,No
+Temporary admission,إفراج مؤقت,"Goods brought in for a limited time (exhibitions, processing, projects) and taken out again",Guarantee,CI;PL;BL;ACID;CO;POA;GUAR,No,Duties suspended against a guarantee: confirm conditions
+Re-export,إعادة تصدير,Goods that pass through Egypt and leave again,Guarantee,CI;PL;BL;ACID;POA;GUAR,No,Confirm conditions
+Project cargo,مشروعات,Equipment for an approved investment project,Yes,CI;PL;BL;ACID;CO;IMP;TAX;POA,No,Projects may qualify for exemptions: confirm per case
+Personal effects,أمتعة شخصية,Household goods and personal belongings,Yes,CI;PL;BL;POA,No,Exemptions may apply: confirm
+Samples,عينات,Samples with no commercial value,Yes,CI;PL;BL;POA,No,May be exempt: confirm
+Free zone,منطقة حرة,Goods entering a free zone,No,CI;PL;BL;ACID;POA;FZ,No,Duty and VAT apply only if the goods later enter Egypt: confirm

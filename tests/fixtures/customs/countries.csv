@@ -1,0 +1,70 @@
+Countries of origin
+"""Agreement to use"" is the agreement whose rate applies to goods from that country (blank = general rate). Where a country is in several agreements, pricing picks the one used in practice."
+
+Country,ISO code,Agreement to use,Notes
+Austria,AT,EU
+Belgium,BE,EU
+Bulgaria,BG,EU
+Croatia,HR,EU
+Cyprus,CY,EU
+Czechia,CZ,EU
+Denmark,DK,EU
+Estonia,EE,EU
+Finland,FI,EU
+France,FR,EU
+Germany,DE,EU
+Greece,GR,EU
+Hungary,HU,EU
+Ireland,IE,EU
+Italy,IT,EU
+Latvia,LV,EU
+Lithuania,LT,EU
+Luxembourg,LU,EU
+Malta,MT,EU
+Netherlands,NL,EU
+Poland,PL,EU
+Portugal,PT,EU
+Romania,RO,EU
+Slovakia,SK,EU
+Slovenia,SI,EU
+Spain,ES,EU
+Sweden,SE,EU
+United Kingdom,GB,UK
+Iceland,IS,EFTA
+Liechtenstein,LI,EFTA
+Norway,NO,EFTA
+Switzerland,CH,EFTA
+Turkey,TR,Turkey
+Jordan,JO,Agadir,Also GAFTA
+Morocco,MA,Agadir,Also GAFTA
+Tunisia,TN,Agadir,Also GAFTA
+Algeria,DZ,GAFTA,Confirm
+Bahrain,BH,GAFTA,Confirm
+Iraq,IQ,GAFTA,Confirm
+Kuwait,KW,GAFTA,Confirm
+Lebanon,LB,GAFTA,Confirm
+Libya,LY,GAFTA,Confirm
+Oman,OM,GAFTA,Confirm
+Palestine,PS,GAFTA,Confirm
+Qatar,QA,GAFTA,Confirm
+Saudi Arabia,SA,GAFTA,Confirm
+Sudan,SD,GAFTA,Confirm
+Syria,SY,GAFTA,Confirm
+United Arab Emirates,AE,GAFTA,Confirm
+Yemen,YE,GAFTA,Confirm
+Kenya,KE,,COMESA member: confirm whether the COMESA rate applies
+Argentina,AR,Mercosur
+Brazil,BR,Mercosur
+Paraguay,PY,Mercosur
+Uruguay,UY,Mercosur
+China,CN
+India,IN
+United States,US
+Japan,JP
+South Korea,KR
+Vietnam,VN
+Indonesia,ID
+Malaysia,MY
+Thailand,TH
+Russia,RU
+Ukraine,UA
