@@ -57,6 +57,7 @@ CREATE TABLE tariff_lines (
     code         text PRIMARY KEY CHECK (code ~ '^[0-9]{6}([0-9]{2})?$'),
     duty_pct     numeric(6,2) NOT NULL CHECK (duty_pct >= 0),
     description_en text,
+    description_ar text,                                  -- read from the PDF: check the page before quoting
     source_page  integer,
     note         text,
     source       text NOT NULL

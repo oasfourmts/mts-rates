@@ -217,22 +217,30 @@ T["A2"] = ("General duty for each tariff line of Presidential Decree 218/2022 wi
            "Encyclopedia of January 2025 (pages 30-495). The calculator uses it when an HS code is not on the Duty Rates "
            "tab: the 8-digit line first, then the 6-digit line. It has no schedule tax, VAT exemptions, agreement rates "
            "or conditions, and no changes after January 2025: for those, use customs.gov.eg and the Duty Rates tab. "
-           "Chapter 24 (tobacco) is not included. Don't edit: rebuilt from the encyclopedia.")
+           "Chapter 24 (tobacco) is not included. The Arabic text is read from the PDF automatically (heading — group — "
+           "line); a few lines keep the PDF's split words or spacing, so check the Encyclopedia page before quoting it. "
+           "Don't edit: rebuilt from the encyclopedia.")
 T["A2"].font = NOTE
-header(T, 4, ["HS code (6 or 8 digits)", "General duty %", "Description (HS, English)", "Encyclopedia page", "Note"],
-       [13, 9, 90, 11, 16])
+header(T, 4, ["HS code (6 or 8 digits)", "General duty %", "Description (HS, English)", "Description (Arabic, tariff)",
+             "Encyclopedia page", "Note"],
+       [13, 9, 70, 70, 11, 22])
+RTL = Alignment(horizontal="right", readingOrder=2)
 for i, row in enumerate(TARIFF, 5):
-    vals = [row["code"], float(row["duty_pct"]), row["description_en"], int(row["page"]), row["note"]]
+    vals = [row["code"], float(row["duty_pct"]), row["description_en"], row["description_ar"], int(row["page"]),
+            row["note"]]
     for c, v in enumerate(vals, 1):
         cell = T.cell(row=i, column=c, value=v)
         cell.font = B
         if c == 1:
             cell.number_format = "@"
+        elif c == 4:
+            cell.alignment = RTL
 T_LAST = 4 + len(TARIFF)
-T.auto_filter.ref = f"A4:E{T_LAST}"
+T.auto_filter.ref = f"A4:F{T_LAST}"
 T_CODE = f"'Tariff 2025'!$A$5:$A${T_LAST}"
 T_RATE = f"'Tariff 2025'!$B$5:$B${T_LAST}"
 T_DESC = f"'Tariff 2025'!$C$5:$C${T_LAST}"
+T_DESC_AR = f"'Tariff 2025'!$D$5:$D${T_LAST}"
 
 # ======================= Duty Rates =======================
 R = wb.create_sheet("Duty Rates", 0)
@@ -441,6 +449,8 @@ for r, label, f, fmt, note in out:
         cell.number_format = fmt
     if note:
         K.cell(row=r, column=4, value=note).font = NOTE
+ar = K.cell(row=22, column=4, value=f'=IFERROR(INDEX({T_DESC_AR},{t8}),IFERROR(INDEX({T_DESC_AR},{t6}),""))')
+ar.font, ar.alignment = B, Alignment(horizontal="right", vertical="top", wrap_text=True, readingOrder=2)
 K["B38"] = "Clearance fees and total"; K["B38"].font = BB
 tot = [
     (39, "Clearance fees (USD)", f"=SUM('Clearance Fees'!$V$5:$V${MAXR})", "From the Clearance Fees rows that apply"),

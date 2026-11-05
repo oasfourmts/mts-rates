@@ -47,8 +47,8 @@ AGREEMENT_COLS = {"code": "code", "name": "agreement", "partners": "partners", "
 COUNTRY_COLS = {"country": "country", "iso": "iso", "agreement": "agreement", "notes": "notes"}
 PURPOSE_COLS = {"purpose": "purpose", "arabic": "arabic", "duties": "duties at clearance", "documents": "documents",
                 "checked": "checked", "notes": "notes"}
-TARIFF_COLS = {"code": "hs code", "duty": "general duty", "description": "description", "page": "encyclopedia page",
-               "note": "note"}
+TARIFF_COLS = {"code": "hs code", "duty": "general duty", "description": "description (hs",
+               "description_ar": "description (arabic", "page": "encyclopedia page", "note": "note"}
 DOCUMENT_COLS = {"code": "code", "name": "document", "issued_by": "issued by", "notes": "notes"}
 
 
@@ -257,6 +257,7 @@ def _tariff(text, res):
         seen.add(code)
         page = _cell(row, cols, "page")
         res.tariff.append({"code": code, "duty_pct": duty, "description_en": _cell(row, cols, "description") or None,
+                           "description_ar": _cell(row, cols, "description_ar") or None,
                            "source_page": int(page) if page.isdigit() else None,
                            "note": _cell(row, cols, "note") or None})
 
@@ -476,9 +477,9 @@ def to_sql(res: CustomsResult, *, source_ref: str) -> str:
         s.add("DELETE FROM tariff_lines;")
         for i in range(0, len(res.tariff), 500):
             values = ", ".join(
-                f"({lit(t['code'])}, {lit(t['duty_pct'])}, {lit(t['description_en'])}, {lit(t['source_page'])}, "
+                f"({lit(t['code'])}, {lit(t['duty_pct'])}, {lit(t['description_en'])}, {lit(t['description_ar'])}, {lit(t['source_page'])}, "
                 f"{lit(t['note'])}, {lit(TARIFF_SOURCE)})" for t in res.tariff[i:i + 500])
-            s.add(f"INSERT INTO tariff_lines (code, duty_pct, description_en, source_page, note, source) VALUES {values};")
+            s.add(f"INSERT INTO tariff_lines (code, duty_pct, description_en, description_ar, source_page, note, source) VALUES {values};")
     cards = {}
     for f in res.fees:
         key = f"{slug(f.broker)}|{f.direction}|{f.currency}|{f.valid_from}|{f.valid_to}"

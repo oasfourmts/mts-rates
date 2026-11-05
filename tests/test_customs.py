@@ -64,6 +64,11 @@ def test_template_as_delivered_reads_cleanly():
     # Matched against customs.gov.eg on 5 Nov 2026
     assert (tariff["841810"], tariff["610910"], tariff["851713"], tariff["847130"], tariff["87032330"]) == (60, 40, 10, 0, 40)
     assert tariff["382751"] == 5 and tariff["210130"] == 30 and tariff["551311"] == 10 and tariff["030499"] == 0
+    arabic = {t["code"]: t["description_ar"] for t in res.tariff}
+    assert arabic["010121"] == "خيول وحمير وبغال ونغال، حية. — خيول — أصيلة للإنسال"
+    assert arabic["74198010"] == "أصناف أخر من نحاس. — غيرها — منشآت وخزانات وأوعية"
+    assert arabic["150600"].startswith("شحوم ودهون وزيوت حيوانية أخر")       # a heading with one line, text above its code
+    assert sum(1 for a in arabic.values() if a) == 5988
     de = next(c for c in res.countries if c["country_code"] == "DE")
     assert de["agreement"] == "EU"
     assert next(c for c in res.countries if c["country_code"] == "CN")["agreement"] is None
@@ -169,6 +174,7 @@ def test_loads_into_the_database(fresh):
     assert psql(fresh, "SELECT schedule_tax_pct FROM hs_codes WHERE code = '8418100090'") == "8.00"
     assert psql(fresh, "SELECT count(*) FROM tariff_lines") == "5989"
     assert psql(fresh, "SELECT duty_pct || ' ' || source_page FROM tariff_lines WHERE code = '87032330'") == "40.00 441"
+    assert psql(fresh, "SELECT description_ar FROM tariff_lines WHERE code = '070110'") == "بطاطا(بطاطس) طازجة أو مبردة. — للبذار"
     assert psql(fresh, "SELECT duty_pct FROM agreement_rates WHERE hs_code = '8517130000' AND agreement = 'Serbia'") == \
         "8.00"
     assert psql(fresh, "SELECT agreement FROM origin_agreements WHERE country_code = 'TR'") == "Turkey"

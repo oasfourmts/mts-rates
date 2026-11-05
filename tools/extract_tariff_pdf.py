@@ -5,7 +5,8 @@ nomenclature on pages 496 onwards.
     python tools/extract_tariff_pdf.py <encyclopedia.pdf> data/tariff_2025.csv
 
 Output columns: code (6 or 8 digits, no dot), duty_pct, description_en (6-digit HS text from the English part;
-8-digit national lines inherit their 6-digit text), page (where the rate is printed), note.
+8-digit national lines inherit their 6-digit text), description_ar (the Arabic tariff text, heading — group —
+line, from tools/tariff_arabic.py; needs pymupdf), page (where the rate is printed), note.
 
 Rules (checked against customs.gov.eg on 5 Nov 2026: 13 of 13 lines found there matched):
 - A tariff line is a line whose first code is NNNN.NN or NNNN.NNNN; its rate is the number (or معفاة, exempt =
@@ -103,16 +104,25 @@ def main(pdf: str, out_csv: str) -> int:
     pages = pdf_pages(pdf)
     rates, dropped = arabic_rates(pages)
     english = english_descriptions(pages)
+    from tariff_arabic import extract           # pymupdf, imported here so the rate rules can be tested without it
+    arabic = extract(pdf)
     with open(out_csv, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, lineterminator="\n")
-        w.writerow(["code", "duty_pct", "description_en", "page", "note"])
+        w.writerow(["code", "duty_pct", "description_en", "description_ar", "page", "note"])
         for code in sorted(rates, key=lambda c: c.replace(".", "")):
             rate, page = rates[code]
             six = code[:7]
             note = "" if len(code) == 7 else "national sub-line"
-            w.writerow([code.replace(".", ""), f"{rate:g}", english.get(six, ""), page, note])
+            ar = arabic.get(code.replace(".", ""), "")
+            en = re.sub(r"\s*_{3,}.*$", "", english.get(six, ""))     # the rule and next chapter title on a last line
+            siblings = sum(1 for c in rates if c[:4] == code[:4])
+            if not ar:
+                note = "; ".join(n for n in (note, "Arabic text not read, see the page") if n)
+            elif (" — " not in ar and siblings > 1) or re.search(r"الجريدة|الرسم ية", ar):
+                note = "; ".join(n for n in (note, "Arabic text incomplete, check the page") if n)
+            w.writerow([code.replace(".", ""), f"{rate:g}", en, ar, page, note])
     print(f"{len(rates)} tariff lines written to {out_csv}; {sum(1 for c in rates if c[:7] in english)} with an "
-          f"English description", file=sys.stderr)
+          f"English description, {sum(1 for c in rates if arabic.get(c.replace('.', '')))} with Arabic", file=sys.stderr)
     for code, rate, page in dropped:
         print(f"check by hand: {code} read as {rate:g} on page {page}", file=sys.stderr)
     return 0
