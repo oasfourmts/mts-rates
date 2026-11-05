@@ -10,4 +10,5 @@ Agadir,Agadir Agreement,"Jordan, Morocco, Tunisia",EUR1,No,Confirm the certifica
 GAFTA,Greater Arab Free Trade Area,Arab League members in GAFTA,CO-ARAB,No,Confirm the member list on the Countries tab
 COMESA,COMESA Free Trade Area,COMESA members in the free trade area,CO-COMESA,No,Not every COMESA member is in the free trade area: confirm
 Mercosur,Egypt-Mercosur Free Trade Agreement,"Argentina, Brazil, Paraguay, Uruguay",CO,No,Confirm the certificate type
-AfCFTA,African Continental Free Trade Area,AfCFTA members,CO,No,Confirm whether Egypt applies AfCFTA rates yet
+AfCFTA,African Continental Free Trade Area,AfCFTA members,CO,No,"The tariff gives AfCFTA rates by category for some lines (e.g. ر6792, ر6793)"
+Serbia,Egypt-Serbia agreement,Serbia,CO,No,In the tariff as ر6722: 20% reduction on listed lines. Confirm the certificate

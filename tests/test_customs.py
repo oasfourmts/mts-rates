@@ -53,11 +53,12 @@ def activated():
 def test_template_as_delivered_reads_cleanly():
     res = customs.parse(template_tabs())
     assert res.issues == []
-    assert res.fees == [] and res.duty_rates == [] and res.skipped_rows == 7    # 4 fee + 3 duty examples
+    assert res.fees == [] and res.skipped_rows == 4                 # the 4 fee rows are examples
+    assert len(res.duty_rates) == 3                                    # filled in from the official tariff
     assert [a["code"] for a in res.agreements] == ["EU", "UK", "EFTA", "Turkey", "Agadir", "GAFTA", "COMESA",
-                                                   "Mercosur", "AfCFTA"]
+                                                   "Mercosur", "AfCFTA", "Serbia"]
     assert {p["purpose"] for p in res.purposes} == set(customs.PURPOSES.values())
-    assert len(res.documents) == 17 and len(res.countries) == 66
+    assert len(res.documents) == 17 and len(res.countries) == 67
     de = next(c for c in res.countries if c["country_code"] == "DE")
     assert de["agreement"] == "EU"
     assert next(c for c in res.countries if c["country_code"] == "CN")["agreement"] is None
@@ -73,20 +74,16 @@ def test_active_rows_parse_into_fees_and_duty_rates():
     assert line.basis == "per_line" and line.shipment_type == "any"
     assert (air.basis, air.amount, air.minimum, air.value_from, air.value_to) == ("percent", Decimal("0.5"), 50, 0, 5000)
     fridge = next(d for d in res.duty_rates if d.hs_code == "8418100090")
-    assert (fridge.duty_pct, fridge.vat_pct, fridge.schedule_tax, fridge.agreement_rates) == (60, 14, "Yes: see tariff", {})
+    assert (fridge.duty_pct, fridge.schedule_tax_pct, fridge.vat_pct) == (60, 8, 14)      # customs.gov.eg, 5 Nov 2026
+    assert fridge.agreement_rates == {"EU": 0, "UK": 0, "EFTA": 0, "Turkey": 0}
+    assert "ر6501" in fridge.notes and fridge.controls == ["NFSA"]
 
 
 def test_agreement_rate_columns_are_read():
-    tabs = activated()
-
-    def eu_zero(rows):
-        header = next(r for r in rows if r and r[0] == "Row status")
-        col = header.index("EU %")
-        phone = next(r for r in rows if len(r) > 1 and r[1] == "8517130000")
-        phone[col] = "0"
-    tabs["Duty Rates"] = edit(tabs["Duty Rates"], eu_zero)
-    phone = next(d for d in customs.parse(tabs).duty_rates if d.hs_code == "8517130000")
-    assert phone.agreement_rates == {"EU": 0}
+    phone = next(d for d in customs.parse(template_tabs()).duty_rates if d.hs_code == "8517130000")
+    # Tariff: EU, UK, EFTA and Mercosur list A reduce 100%; Serbia reduces 20% (10% -> 8%).
+    assert phone.agreement_rates == {"EU": 0, "UK": 0, "EFTA": 0, "Mercosur": 0, "Serbia": 8}
+    assert phone.schedule_tax_pct is None
 
 
 @pytest.mark.parametrize("col, value, message", [
@@ -124,14 +121,15 @@ def test_overlapping_value_bands_are_flagged():
 @pytest.mark.parametrize("col, value, message", [
     (1, "8418.10", "HS code must be 10 digits"),
     (3, "sixty", "General duty % is not a number"),
-    (16, "", "Source and date checked is empty"),
+    (4, "8% of value", "Schedule tax % is not a number"),
+    (18, "", "Source and date checked is empty"),
 ])
 def test_bad_duty_rows_are_issues(col, value, message):
     tabs = activated()
 
     def spoil(rows):
         row = next(r for r in rows if len(r) > 1 and r[1] == "8418100090")
-        row += [""] * (19 - len(row))
+        row += [""] * (20 - len(row))
         row[col] = value
     tabs["Duty Rates"] = edit(tabs["Duty Rates"], spoil)
     res = customs.parse(tabs)
@@ -163,6 +161,9 @@ def test_loads_into_the_database(fresh):
                        "WHERE basis = 'percent'") == "percent 0.50 50.00 5000.00"
     assert psql(fresh, "SELECT duty_pct || ' ' || vat_pct || ' ' || array_to_string(permits, ';') FROM hs_codes "
                        "WHERE code = '8517130000'") == "10.00 14.00 NTRA"
+    assert psql(fresh, "SELECT schedule_tax_pct FROM hs_codes WHERE code = '8418100090'") == "8.00"
+    assert psql(fresh, "SELECT duty_pct FROM agreement_rates WHERE hs_code = '8517130000' AND agreement = 'Serbia'") == \
+        "8.00"
     assert psql(fresh, "SELECT agreement FROM origin_agreements WHERE country_code = 'TR'") == "Turkey"
     assert psql(fresh, "SELECT duties_at_clearance FROM customs_purposes WHERE purpose = 'temporary_admission'") == \
         "guarantee"

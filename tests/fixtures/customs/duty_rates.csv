@@ -1,7 +1,7 @@
 Duty rates by HS code
 "One row per HS code, from the official tariff at customs.gov.eg/Services/Tarif. Rates are percentages (40 = 40%). Agreement columns: the preferential rate with a valid certificate; leave blank if the general rate applies. Always fill in the source and the date you checked it."
 
-Row status,HS code (10 digits),Description,General duty %,Schedule tax (ضريبة الجدول),VAT %,EU %,UK %,EFTA %,Turkey %,Agadir %,GAFTA %,COMESA %,Mercosur %,AfCFTA %,Import controls (document codes),Source and date checked,Remarks
-Example,6109100000,"T-shirts and vests, knitted, of cotton",40,,14,,,,,,,,,,GOEIC,"gomruky.com, Aug 2026: confirm on customs.gov.eg",Example only
-Example,8418100090,Combined refrigerator-freezers,60,Yes: see tariff,14,,,,,,,,,,GOEIC,"gomruky.com, Aug 2026: confirm on customs.gov.eg",Example only
-Example,8517130000,Smartphones,10,,14,,,,,,,,,,NTRA,"gomruky.com, Aug 2026: confirm on customs.gov.eg",Example only
+Row status,HS code (10 digits),Description,General duty %,Schedule tax %,VAT %,EU %,UK %,EFTA %,Turkey %,Agadir %,GAFTA %,COMESA %,Mercosur %,AfCFTA %,Serbia %,Import controls (document codes),Tariff notes,Source and date checked,Remarks
+Active,6109100000,"T-shirts and vests, knitted, of cotton",40,,14,0,0,0,0,,,,,,,GOEIC,"Mercosur: rate by category (ر6706). COMESA: Sudan excluded from the exemption (ر6511). Jordan, Tunisia: bilateral exceptions (ر6516, ر6517). Released only at specified ports (ق1010). Approval stamped by GOEIC (ق4518).","customs.gov.eg/Services/Tarif, checked 5 Nov 2026"
+Active,8418100090,"Combined refrigerator-freezers, over 16 cu ft, not for household use",60,8,14,0,0,0,0,,,,,,,NFSA,"Hotels and tourism: 20% duty or the general rate, whichever is lower (ر6501). Mercosur: rate by category (ر6706). Refrigeration equipment: approval needed before release (ق4016). NFSA release (ق4550).","customs.gov.eg/Services/Tarif, checked 5 Nov 2026"
+Active,8517130000,Smartphones,10,,14,0,0,0,,,,,0,,8,NTRA,"State resource development fee on mobile phones (ر6589): amount not in the tariff entry. AfCFTA: rate by category (ر6792, ر6793). Serbia: 20% reduction (ر6722). Used devices for trade prohibited (ق2038). Ministry of Interior approval (غ4136).","customs.gov.eg/Services/Tarif, checked 5 Nov 2026"

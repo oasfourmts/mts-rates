@@ -39,8 +39,8 @@ FEE_COLS = {"status": "row status", "direction": "direction", "point": "clearanc
             "broker": "broker", "valid_from": "valid from", "valid_to": "valid to", "documents": "documents",
             "remarks": "remarks"}
 DUTY_COLS = {"status": "row status", "hs": "hs code", "description": "description", "duty": "general duty",
-             "schedule": "schedule tax", "vat": "vat", "controls": "import controls", "source": "source",
-             "remarks": "remarks"}
+             "schedule": "schedule tax", "vat": "vat", "controls": "import controls", "notes": "tariff notes",
+             "source": "source", "remarks": "remarks"}
 AGREEMENT_COLS = {"code": "code", "name": "agreement", "partners": "partners", "certificate": "certificate",
                   "checked": "checked", "notes": "notes"}
 COUNTRY_COLS = {"country": "country", "iso": "iso", "agreement": "agreement", "notes": "notes"}
@@ -77,11 +77,12 @@ class DutyRate:
     hs_code: str
     description: str
     duty_pct: Decimal
-    schedule_tax: str
+    schedule_tax_pct: Decimal | None
     vat_pct: Decimal | None
     agreement_rates: dict[str, Decimal]
     controls: list[str]
     source: str
+    notes: str = ""
 
 
 @dataclass
@@ -277,6 +278,9 @@ def _duty_rates(text, res, agreements, docs):
         if duty is None:
             res.issues.append(Issue(ref, "skipped", "General duty % is empty"))
             continue
+        ok, schedule = _pct(_cell(row, cols, "schedule"), ref, "Schedule tax %", res)
+        if not ok:
+            continue
         ok, vat = _pct(_cell(row, cols, "vat"), ref, "VAT %", res)
         if not ok:
             continue
@@ -295,8 +299,8 @@ def _duty_rates(text, res, agreements, docs):
         unknown = [d for d in controls if docs and d not in docs]
         if unknown:
             res.issues.append(Issue(ref, "warning", "import control codes not on the Documents tab", ";".join(unknown)))
-        res.duty_rates.append(DutyRate(ref, hs, _cell(row, cols, "description"), duty,
-                                       _cell(row, cols, "schedule"), vat, rates, controls, source))
+        res.duty_rates.append(DutyRate(ref, hs, _cell(row, cols, "description"), duty, schedule, vat, rates, controls,
+                                       source, _cell(row, cols, "notes")))
 
 
 def _fees(text, res, docs):
@@ -426,12 +430,12 @@ def to_sql(res: CustomsResult, *, source_ref: str) -> str:
         s.add("INSERT INTO audit_log (actor, action, table_name, detail) SELECT 'import_sheets', 'hs_code.update', "
               f"'hs_codes', jsonb_build_object('hs_code', code, 'old_duty_pct', duty_pct, 'new_duty_pct', {lit(r.duty_pct)}::numeric) "
               f"FROM hs_codes WHERE code = {lit(r.hs_code)} AND duty_pct IS DISTINCT FROM {lit(r.duty_pct)};")
-        s.add("INSERT INTO hs_codes (code, description, duty_pct, vat_pct, permits, schedule_tax, source, updated_at) "
-              f"VALUES ({lit(r.hs_code)}, {lit(r.description or r.hs_code)}, {lit(r.duty_pct)}, {lit(r.vat_pct)}, "
-              f"{lit(r.controls)}, {lit(r.schedule_tax or None)}, {lit(r.source)}, now()) ON CONFLICT (code) DO UPDATE SET "
-              "description = EXCLUDED.description, duty_pct = EXCLUDED.duty_pct, vat_pct = EXCLUDED.vat_pct, "
-              "permits = EXCLUDED.permits, schedule_tax = EXCLUDED.schedule_tax, source = EXCLUDED.source, "
-              "updated_at = now();")
+        s.add("INSERT INTO hs_codes (code, description, duty_pct, vat_pct, permits, schedule_tax_pct, tariff_notes, "
+              f"source, updated_at) VALUES ({lit(r.hs_code)}, {lit(r.description or r.hs_code)}, {lit(r.duty_pct)}, "
+              f"{lit(r.vat_pct)}, {lit(r.controls)}, {lit(r.schedule_tax_pct)}, {lit(r.notes or None)}, {lit(r.source)}, "
+              "now()) ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description, duty_pct = EXCLUDED.duty_pct, "
+              "vat_pct = EXCLUDED.vat_pct, permits = EXCLUDED.permits, schedule_tax_pct = EXCLUDED.schedule_tax_pct, "
+              "tariff_notes = EXCLUDED.tariff_notes, source = EXCLUDED.source, updated_at = now();")
         s.add(f"DELETE FROM agreement_rates WHERE hs_code = {lit(r.hs_code)};")
         for code, pct in r.agreement_rates.items():
             s.add(f"INSERT INTO agreement_rates (hs_code, agreement, duty_pct) VALUES ({lit(r.hs_code)}, {lit(code)}, {pct});")

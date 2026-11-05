@@ -22,7 +22,8 @@ ALTER TABLE customs_rates
 COMMENT ON COLUMN customs_rates.fee IS 'Amount in the rate card currency; for basis percent, the percent of the invoice value';
 
 ALTER TABLE hs_codes
-    ADD COLUMN schedule_tax text,                         -- as written in the tariff (rate or note)
+    ADD COLUMN schedule_tax_pct numeric(6,2),             -- ضريبة الجدول, on (customs value + duty)
+    ADD COLUMN tariff_notes text,                         -- other fees and release conditions, with tariff codes
     ADD COLUMN source       text,                         -- where and when the rates were checked
     ADD COLUMN updated_at   timestamptz;
 

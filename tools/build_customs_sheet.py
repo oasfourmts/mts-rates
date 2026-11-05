@@ -163,7 +163,9 @@ AGREEMENTS = [
     ("Mercosur", "Egypt-Mercosur Free Trade Agreement", "Argentina, Brazil, Paraguay, Uruguay", "CO", "No",
      "Confirm the certificate type"),
     ("AfCFTA", "African Continental Free Trade Area", "AfCFTA members", "CO", "No",
-     "Confirm whether Egypt applies AfCFTA rates yet"),
+     "The tariff gives AfCFTA rates by category for some lines (e.g. ر6792, ر6793)"),
+    ("Serbia", "Egypt-Serbia agreement", "Serbia", "CO", "No",
+     "In the tariff as ر6722: 20% reduction on listed lines. Confirm the certificate"),
 ]
 rows(A, 5, AGREEMENTS)
 dropdown(A, "E5:E30", ref["Yes/No"], "Checked by pricing")
@@ -197,7 +199,7 @@ COUNTRIES += [("United Kingdom", "GB", "UK", ""), ("Iceland", "IS", "EFTA", ""),
               ("China", "CN", "", ""), ("India", "IN", "", ""), ("United States", "US", "", ""), ("Japan", "JP", "", ""),
               ("South Korea", "KR", "", ""), ("Vietnam", "VN", "", ""), ("Indonesia", "ID", "", ""),
               ("Malaysia", "MY", "", ""), ("Thailand", "TH", "", ""), ("Russia", "RU", "", ""),
-              ("Ukraine", "UA", "", "")]
+              ("Ukraine", "UA", "", ""), ("Serbia", "RS", "Serbia", "")]
 rows(C, 5, COUNTRIES)
 C.auto_filter.ref = f"A4:D{4 + len(COUNTRIES)}"
 dropdown(C, f"C5:C{MAXR}", f"=Agreements!$A$5:$A${4 + len(AGREEMENTS)}", "Agreement")
@@ -211,17 +213,34 @@ R["A2"] = ("One row per HS code, from the official tariff at customs.gov.eg/Serv
            "general rate applies. Always fill in the source and the date you checked it.")
 R["A2"].font = NOTE
 AG_CODES = [a[0] for a in AGREEMENTS]
-duty_cols = (["Row status", "HS code (10 digits)", "Description", "General duty %", "Schedule tax (ضريبة الجدول)",
-              "VAT %"] + [f"{c} %" for c in AG_CODES] + ["Import controls (document codes)",
+duty_cols = (["Row status", "HS code (10 digits)", "Description", "General duty %", "Schedule tax %",
+              "VAT %"] + [f"{c} %" for c in AG_CODES] + ["Import controls (document codes)", "Tariff notes",
                                                         "Source and date checked", "Remarks"])
-header(R, 4, duty_cols, [10, 14, 34, 9, 14, 7] + [8] * len(AG_CODES) + [18, 30, 30])
-SRC = "gomruky.com, Aug 2026: confirm on customs.gov.eg"
+header(R, 4, duty_cols, [10, 14, 34, 9, 9, 7] + [8] * len(AG_CODES) + [16, 60, 26, 20])
+SRC = "customs.gov.eg/Services/Tarif, checked 5 Nov 2026"
+
+
+def ag(**rates):
+    """Agreement columns in AG_CODES order; blank where the tariff gives no rate."""
+    return [rates.get(c) for c in AG_CODES]
+
+
 DUTY = [
-    ["Example", "6109100000", "T-shirts and vests, knitted, of cotton", 40, "", 14] + [None] * len(AG_CODES)
-    + ["GOEIC", SRC, "Example only"],
-    ["Example", "8418100090", "Combined refrigerator-freezers", 60, "Yes: see tariff", 14] + [None] * len(AG_CODES)
-    + ["GOEIC", SRC, "Example only"],
-    ["Example", "8517130000", "Smartphones", 10, "", 14] + [None] * len(AG_CODES) + ["NTRA", SRC, "Example only"],
+    ["Active", "6109100000", "T-shirts and vests, knitted, of cotton", 40, None, 14]
+    + ag(EU=0, UK=0, EFTA=0, Turkey=0)
+    + ["GOEIC", "Mercosur: rate by category (ر6706). COMESA: Sudan excluded from the exemption (ر6511). Jordan, "
+       "Tunisia: bilateral exceptions (ر6516, ر6517). Released only at specified ports (ق1010). Approval stamped by "
+       "GOEIC (ق4518).", SRC, ""],
+    ["Active", "8418100090", "Combined refrigerator-freezers, over 16 cu ft, not for household use", 60, 8, 14]
+    + ag(EU=0, UK=0, EFTA=0, Turkey=0)
+    + ["NFSA", "Hotels and tourism: 20% duty or the general rate, whichever is lower (ر6501). Mercosur: rate by "
+       "category (ر6706). Refrigeration equipment: approval needed before release (ق4016). NFSA release (ق4550).",
+       SRC, ""],
+    ["Active", "8517130000", "Smartphones", 10, None, 14]
+    + ag(EU=0, UK=0, EFTA=0, Mercosur=0, Serbia=8)
+    + ["NTRA", "State resource development fee on mobile phones (ر6589): amount not in the tariff entry. AfCFTA: "
+       "rate by category (ر6792, ر6793). Serbia: 20% reduction (ر6722). Used devices for trade prohibited (ق2038). "
+       "Ministry of Interior approval (غ4136).", SRC, ""],
 ]
 rows(R, 5, DUTY, example_col=1, text_cols=(2,))
 for r in range(5, MAXR + 1):
@@ -231,6 +250,7 @@ R.auto_filter.ref = f"A4:{R.cell(row=4, column=len(duty_cols)).column_letter}{MA
 AG_FIRST = R.cell(row=4, column=7).column_letter
 AG_LAST = R.cell(row=4, column=6 + len(AG_CODES)).column_letter
 CTRL = R.cell(row=4, column=7 + len(AG_CODES)).column_letter
+NOTES = R.cell(row=4, column=8 + len(AG_CODES)).column_letter
 
 # ======================= Clearance Fees =======================
 S = wb.create_sheet("Clearance Fees", 0)
@@ -352,44 +372,50 @@ out = [
      "Agreement rate with a certificate, otherwise the general rate"),
     (26, "CIF value (USD)", "=C11+C12+C13", "#,##0.00", "Invoice + freight + insurance"),
     (27, "Customs duty (USD)", "=C26*C25/100", "#,##0.00", ""),
-    (28, "Schedule tax", f'=IFERROR(INDEX({duty("E")},MATCH(C8,{hs_rng},0))&"","")', None,
-     "Not included in the estimate: confirm the amount with the broker"),
-    (29, "VAT rate %", f'=IFERROR(INDEX({duty("F")},MATCH(C8,{hs_rng},0)),NA())', "0.0", ""),
-    (30, "VAT (USD)", "=(C26+C27)*C29/100", "#,##0.00", "On CIF value + duty"),
-    (31, "Duties at clearance for this purpose", '=IFERROR(INDEX(Purposes!$D$5:$D$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")',
+    (28, "Schedule tax %", f'=IFERROR(INDEX({duty("E")},MATCH(C8,{hs_rng},0)),"")', "0.0",
+     "Blank when the HS code has none"),
+    (29, "Schedule tax (USD)", '=IF(N(C28)=0,0,(C26+C27)*C28/100)', "#,##0.00", "On CIF value + duty"),
+    (30, "VAT rate %", f'=IFERROR(INDEX({duty("F")},MATCH(C8,{hs_rng},0)),NA())', "0.0", ""),
+    (31, "VAT (USD)", "=(C26+C27)*C30/100", "#,##0.00", "On CIF value + duty, as the tariff states"),
+    (32, "Duties at clearance for this purpose", '=IFERROR(INDEX(Purposes!$D$5:$D$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")',
      None, "From the Purposes tab"),
-    (32, "Duty + VAT to pay (USD)", '=IF(C31="Yes",C27+C30,0)', "#,##0.00", ""),
-    (33, "Duty + VAT under guarantee (USD)", '=IF(C31="Guarantee",C27+C30,0)', "#,##0.00",
+    (33, "Duty and taxes to pay (USD)", '=IF(C32="Yes",C27+C29+C31,0)', "#,##0.00", "Duty + schedule tax + VAT"),
+    (34, "Duty and taxes under guarantee (USD)", '=IF(C32="Guarantee",C27+C29+C31,0)', "#,##0.00",
      "Suspended, but the guarantee must cover it"),
+    (35, "Tariff notes", f'=IFERROR(INDEX({duty(NOTES)},MATCH(C8,{hs_rng},0))&"","")', None,
+     "Other fees and conditions the estimate does not include"),
 ]
 for r, label, f, fmt, note in out:
     K.cell(row=r, column=2, value=label).font = B
     cell = K.cell(row=r, column=3, value=f)
     cell.font, cell.border = B, GRID
+    if r == 35:
+        cell.alignment = WRAP
+        K.row_dimensions[r].height = 54
     if fmt:
         cell.number_format = fmt
     if note:
         K.cell(row=r, column=4, value=note).font = NOTE
-K["B35"] = "Clearance fees and total"; K["B35"].font = BB
+K["B37"] = "Clearance fees and total"; K["B37"].font = BB
 tot = [
-    (36, "Clearance fees (USD)", f"=SUM('Clearance Fees'!$V$5:$V${MAXR})", "From the Clearance Fees rows that apply"),
-    (37, "Fee rows used", f"=SUM('Clearance Fees'!$U$5:$U${MAXR})", "0 means no fee row matches this shipment"),
-    (38, "Total to pay (USD)", "=C32+C36", "Duty + VAT to pay + clearance fees"),
-    (39, "Total to pay (EGP)", "=C38*C16", ""),
+    (38, "Clearance fees (USD)", f"=SUM('Clearance Fees'!$V$5:$V${MAXR})", "From the Clearance Fees rows that apply"),
+    (39, "Fee rows used", f"=SUM('Clearance Fees'!$U$5:$U${MAXR})", "0 means no fee row matches this shipment"),
+    (40, "Total to pay (USD)", "=C33+C38", "Duty and taxes to pay + clearance fees"),
+    (41, "Total to pay (EGP)", "=C40*C16", ""),
 ]
 for r, label, f, note in tot:
-    K.cell(row=r, column=2, value=label).font = BB if r in (38, 39) else B
+    K.cell(row=r, column=2, value=label).font = BB if r in (40, 41) else B
     cell = K.cell(row=r, column=3, value=f)
-    cell.font, cell.border = (BB if r in (38, 39) else B), GRID
-    cell.number_format = "0" if r == 37 else "#,##0.00"
+    cell.font, cell.border = (BB if r in (40, 41) else B), GRID
+    cell.number_format = "0" if r == 39 else "#,##0.00"
     if note:
         K.cell(row=r, column=4, value=note).font = NOTE
-K["B41"] = "Documents to ask the client for"; K["B41"].font = BB
-K["C41"] = (f'=IFERROR(INDEX(Purposes!$E$5:$E$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")'
+K["B43"] = "Documents to ask the client for"; K["B43"].font = BB
+K["C43"] = (f'=IFERROR(INDEX(Purposes!$E$5:$E$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")'
             f'&IF(C24<>"",";"&IFERROR(INDEX(Agreements!$D$5:$D$30,MATCH(C23,Agreements!$A$5:$A$30,0)),""),"")'
             f'&IFERROR(IF(INDEX({duty(CTRL)},MATCH(C8,{hs_rng},0))&""="","",";"&INDEX({duty(CTRL)},MATCH(C8,{hs_rng},0))),"")')
-K["C41"].font, K["C41"].alignment = B, WRAP
-K["D41"] = "Codes are explained on the Documents tab"; K["D41"].font = NOTE
+K["C43"].font, K["C43"].alignment = B, WRAP
+K["D43"] = "Codes are explained on the Documents tab"; K["D43"].font = NOTE
 K.freeze_panes = "A4"
 
 # ======================= Read me =======================
@@ -403,7 +429,8 @@ sections = [
     ("Customs value", "Commercial invoice + freight + insurance to Egypt (CIF). Customs can reassess a value it finds too low."),
     ("Customs duty", "CIF value × the duty rate of the HS code (Duty Rates tab). With a valid certificate of origin, an "
      "agreement can lower the rate (Countries and Agreements tabs)."),
-    ("VAT", "14% of (CIF value + duty), unless the tariff gives another rate. Some goods also carry a schedule tax."),
+    ("Schedule tax", "Some HS codes carry a schedule tax (ضريبة الجدول), e.g. 8% of (CIF value + duty)."),
+    ("VAT", "14% of (CIF value + duty), as the tariff states, unless it gives another rate."),
     ("Purpose of the goods", "Decides whether duty and VAT are paid, suspended under a guarantee, or not due (Purposes tab), "
      "and which documents are needed."),
     ("Clearance fees", "The broker's or MTS's own fees (Clearance Fees tab): by port, shipment type, purpose, HS chapter "
@@ -413,12 +440,22 @@ sections = [
     ("Calculator", "Try a shipment: enter HS code, origin, invoice value and purpose to see duties, VAT, fees and "
      "documents."),
     ("Clearance Fees", "Fill in: your clearance prices, one fee per row. Imported by the app."),
-    ("Duty Rates", "Fill in: duty, VAT and agreement rates for the HS codes MTS handles, from customs.gov.eg/Services/Tarif."),
+    ("Duty Rates", "Fill in: duty, schedule tax, VAT and agreement rates for the HS codes MTS handles, from "
+     "customs.gov.eg/Services/Tarif. Three lines are filled in from the tariff as a model."),
     ("Countries", "Check: which agreement applies to each country of origin."),
     ("Agreements", "Check: agreement names, partners and certificates."),
     ("Purposes", "Check: duty treatment and documents for each purpose."),
     ("Documents", "Codes for documents, used in the other tabs."),
     ("Lists", "The values the dropdowns offer. Add a clearance point here if you need a new one."),
+    ("", None),
+    ("Reading the official tariff", None),
+    ("Find the code", "customs.gov.eg/Services/Tarif: choose وارد, search the code or a word, open التفاصيل."),
+    ("Taxes", "ضريبة الوارد = General duty %. ضريبة قيمه مضافه = VAT %. ضريبة الجدول, when listed = Schedule tax %."),
+    ("Agreements", "Instructions starting with ر give agreement reductions. A 100% reduction means 0 in that agreement's "
+     "column; a 20% reduction means 80% of the general rate (10% duty -> 8). \"By category\" (الفئات) means the "
+     "rate depends on the agreement's list: leave the column blank and note it."),
+    ("Conditions", "Instructions starting with ق or غ are release conditions and other fees: put the matching document "
+     "codes in Import controls, and a short note with the codes in Tariff notes."),
     ("", None),
     ("Rules (so the app can read the sheet)", None),
     ("1", "Set Row status to Active for rows the app should use. Draft rows are kept but not used. Example rows show "
@@ -441,7 +478,7 @@ sections = [
     ("Colours", "Grey rows are examples. Yellow cells on the Calculator are inputs. Grey columns on Clearance Fees are "
      "the calculator's: don't edit them."),
     ("Sources", "Cost structure: gomruky.com/customs/clearance-costs (Aug 2026), sino-shipping.com import duties and "
-     "taxes guide (Mar 2026). Official tariff: customs.gov.eg/Services/Tarif. Agreements: trade.gov Egypt country "
+     "taxes guide (Mar 2026). Official tariff: customs.gov.eg/Services/Tarif (checked 5 Nov 2026). Agreements: trade.gov Egypt country "
      "guide (Nov 2025)."),
 ]
 r = 4
