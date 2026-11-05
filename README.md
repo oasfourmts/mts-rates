@@ -82,6 +82,9 @@ Customs clearance sheet: the pricing team fills in `templates/MTS_Customs_Cleara
 Drive as a Google Sheet and shared with rates-agent). Import it with
 `--args=-m,app.db.import_sheets,--customs,<SHEET_ID>` (add `,--dry-run` first). Only rows with Row status Active
 are loaded; duty rates and the reference tabs update in place, clearance fees become rate cards.
+The sheet's Tariff 2025 tab (general duty for about 6,000 tariff lines) is built from the Customs Encyclopedia PDF
+of January 2025: `python tools/extract_tariff_pdf.py <pdf> data/tariff_2025.csv`, then
+`python tools/build_customs_sheet.py`.
 
 | Piece | Runs as | Database role |
 | --- | --- | --- |

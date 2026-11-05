@@ -14,7 +14,7 @@ from tests.conftest import DSN, ROOT, pg_required, psql
 
 FIX = Path(__file__).parent / "fixtures" / "customs"
 TABS = {"Clearance Fees": "fees", "Duty Rates": "duty_rates", "Agreements": "agreements", "Countries": "countries",
-        "Purposes": "purposes", "Documents": "documents"}
+        "Purposes": "purposes", "Documents": "documents", "Tariff 2025": "tariff"}
 
 
 def template_tabs():
@@ -59,6 +59,11 @@ def test_template_as_delivered_reads_cleanly():
                                                    "Mercosur", "AfCFTA", "Serbia"]
     assert {p["purpose"] for p in res.purposes} == set(customs.PURPOSES.values())
     assert len(res.documents) == 17 and len(res.countries) == 67
+    tariff = {t["code"]: t["duty_pct"] for t in res.tariff}
+    assert len(tariff) == 5989
+    # Matched against customs.gov.eg on 5 Nov 2026
+    assert (tariff["841810"], tariff["610910"], tariff["851713"], tariff["847130"], tariff["87032330"]) == (60, 40, 10, 0, 40)
+    assert tariff["382751"] == 5 and tariff["210130"] == 30 and tariff["551311"] == 10 and tariff["030499"] == 0
     de = next(c for c in res.countries if c["country_code"] == "DE")
     assert de["agreement"] == "EU"
     assert next(c for c in res.countries if c["country_code"] == "CN")["agreement"] is None
@@ -162,6 +167,8 @@ def test_loads_into_the_database(fresh):
     assert psql(fresh, "SELECT duty_pct || ' ' || vat_pct || ' ' || array_to_string(permits, ';') FROM hs_codes "
                        "WHERE code = '8517130000'") == "10.00 14.00 NTRA"
     assert psql(fresh, "SELECT schedule_tax_pct FROM hs_codes WHERE code = '8418100090'") == "8.00"
+    assert psql(fresh, "SELECT count(*) FROM tariff_lines") == "5989"
+    assert psql(fresh, "SELECT duty_pct || ' ' || source_page FROM tariff_lines WHERE code = '87032330'") == "40.00 441"
     assert psql(fresh, "SELECT duty_pct FROM agreement_rates WHERE hs_code = '8517130000' AND agreement = 'Serbia'") == \
         "8.00"
     assert psql(fresh, "SELECT agreement FROM origin_agreements WHERE country_code = 'TR'") == "Turkey"
@@ -200,3 +207,17 @@ def test_import_job_runs_the_customs_sheet(fresh):
     assert psql(fresh, "SELECT fee FROM customs_rates cr JOIN rate_cards rc ON rc.id = cr.rate_card_id "
                        "WHERE rc.status = 'active' AND cr.fee_item = 'Clearance fee' AND cr.hs_chapter IS NULL "
                        "AND cr.basis = 'per_shipment'") == "4750.00"
+
+
+def test_bad_tariff_rows_are_issues():
+    tabs = template_tabs()
+
+    def spoil(rows):
+        rows.append(["8471.3", "5", "bad code"])
+        rows.append(["99999999", "a lot", "bad rate"])
+        rows.append(["847130", "0", "listed twice"])
+    tabs["Tariff 2025"] = edit(tabs["Tariff 2025"], spoil)
+    res = customs.parse(tabs)
+    assert len(res.tariff) == 5989
+    assert {i.message for i in res.issues} == {"tariff code must be 6 or 8 digits", "General duty % is not a number",
+                                                "tariff code listed twice"}

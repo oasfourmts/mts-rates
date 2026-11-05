@@ -51,6 +51,17 @@ CREATE TABLE origin_agreements (
     notes        text
 );
 
+-- General import duty per tariff line (Decree 218/2022 with amendments, Customs Encyclopedia January 2025).
+-- Used when an HS code is not in hs_codes: the 8-digit line first, then the 6-digit line.
+CREATE TABLE tariff_lines (
+    code         text PRIMARY KEY CHECK (code ~ '^[0-9]{6}([0-9]{2})?$'),
+    duty_pct     numeric(6,2) NOT NULL CHECK (duty_pct >= 0),
+    description_en text,
+    source_page  integer,
+    note         text,
+    source       text NOT NULL
+);
+
 CREATE TABLE customs_documents (
     code         text PRIMARY KEY,
     name         text NOT NULL,

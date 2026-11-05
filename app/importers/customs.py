@@ -19,7 +19,8 @@ from decimal import Decimal
 from . import sqlout
 from .common import Issue, clean, match_key, parse_date, parse_number, read_csv, slug
 
-TAB_NAMES = ["Documents", "Agreements", "Countries", "Purposes", "Duty Rates", "Clearance Fees"]
+TAB_NAMES = ["Documents", "Agreements", "Countries", "Purposes", "Duty Rates", "Clearance Fees", "Tariff 2025"]
+TARIFF_SOURCE = "Customs Encyclopedia (الموسوعة الجمركية), January 2025: Decree 218/2022 with amendments"
 POINTS = {"ANY": None, "ALEXANDRIA": "EGALY", "EL DEKHEILA": "EGEDK", "DAMIETTA": "EGDAM",
           "PORT SAID EAST": "EGPSE", "SOKHNA": "EGSOK", "ADABIYA": "EGADA", "CAIRO AIRPORT": "CAI"}
 SHIPMENT_TYPES = {"ANY": "any", "FCL": "fcl", "LCL": "lcl", "AIR": "air", "COURIER": "courier", "ROAD": "road"}
@@ -46,6 +47,8 @@ AGREEMENT_COLS = {"code": "code", "name": "agreement", "partners": "partners", "
 COUNTRY_COLS = {"country": "country", "iso": "iso", "agreement": "agreement", "notes": "notes"}
 PURPOSE_COLS = {"purpose": "purpose", "arabic": "arabic", "duties": "duties at clearance", "documents": "documents",
                 "checked": "checked", "notes": "notes"}
+TARIFF_COLS = {"code": "hs code", "duty": "general duty", "description": "description", "page": "encyclopedia page",
+               "note": "note"}
 DOCUMENT_COLS = {"code": "code", "name": "document", "issued_by": "issued by", "notes": "notes"}
 
 
@@ -93,6 +96,7 @@ class CustomsResult:
     countries: list[dict] = field(default_factory=list)
     purposes: list[dict] = field(default_factory=list)
     documents: list[dict] = field(default_factory=list)
+    tariff: list[dict] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
     skipped_rows: int = 0          # Draft and Example rows
 
@@ -139,7 +143,9 @@ def parse(tabs: dict[str, str]) -> CustomsResult:
         _duty_rates(tabs["Duty Rates"], res, agreements, known_docs)
     if "Clearance Fees" in tabs:
         _fees(tabs["Clearance Fees"], res, known_docs)
-    for name in ("Clearance Fees", "Duty Rates", "Agreements", "Countries", "Purposes", "Documents"):
+    if "Tariff 2025" in tabs:
+        _tariff(tabs["Tariff 2025"], res)
+    for name in TAB_NAMES:
         if name not in tabs:
             res.issues.append(Issue(name, "warning", "tab not found; nothing read from it"))
     return res
@@ -227,6 +233,32 @@ def _purposes(text, res, docs):
                              "duties_at_clearance": duties, "documents": documents,
                              "checked": _cell(row, cols, "checked").upper() == "YES",
                              "notes": _cell(row, cols, "notes") or None})
+
+
+def _tariff(text, res):
+    out = _rows(text, "Tariff 2025", TARIFF_COLS, ["code", "duty"], res)
+    if not out:
+        return
+    rows, cols = out
+    seen = set()
+    for ref, row in rows:
+        code = re.sub(r"[.\s]", "", _cell(row, cols, "code"))
+        if not re.fullmatch(r"\d{6}(\d{2})?", code):
+            res.issues.append(Issue(ref, "skipped", "tariff code must be 6 or 8 digits", _cell(row, cols, "code")))
+            continue
+        ok, duty = _pct(_cell(row, cols, "duty"), ref, "General duty %", res)
+        if not ok or duty is None:
+            if ok:
+                res.issues.append(Issue(ref, "skipped", "General duty % is empty"))
+            continue
+        if code in seen:
+            res.issues.append(Issue(ref, "skipped", "tariff code listed twice", code))
+            continue
+        seen.add(code)
+        page = _cell(row, cols, "page")
+        res.tariff.append({"code": code, "duty_pct": duty, "description_en": _cell(row, cols, "description") or None,
+                           "source_page": int(page) if page.isdigit() else None,
+                           "note": _cell(row, cols, "note") or None})
 
 
 def _status(row, cols, ref, res) -> bool:
@@ -439,6 +471,14 @@ def to_sql(res: CustomsResult, *, source_ref: str) -> str:
         s.add(f"DELETE FROM agreement_rates WHERE hs_code = {lit(r.hs_code)};")
         for code, pct in r.agreement_rates.items():
             s.add(f"INSERT INTO agreement_rates (hs_code, agreement, duty_pct) VALUES ({lit(r.hs_code)}, {lit(code)}, {pct});")
+    if res.tariff:
+        # Reference data, replaced as a whole: the tab is rebuilt from the encyclopedia.
+        s.add("DELETE FROM tariff_lines;")
+        for i in range(0, len(res.tariff), 500):
+            values = ", ".join(
+                f"({lit(t['code'])}, {lit(t['duty_pct'])}, {lit(t['description_en'])}, {lit(t['source_page'])}, "
+                f"{lit(t['note'])}, {lit(TARIFF_SOURCE)})" for t in res.tariff[i:i + 500])
+            s.add(f"INSERT INTO tariff_lines (code, duty_pct, description_en, source_page, note, source) VALUES {values};")
     cards = {}
     for f in res.fees:
         key = f"{slug(f.broker)}|{f.direction}|{f.currency}|{f.valid_from}|{f.valid_to}"

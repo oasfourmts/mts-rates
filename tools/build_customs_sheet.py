@@ -205,6 +205,35 @@ C.auto_filter.ref = f"A4:D{4 + len(COUNTRIES)}"
 dropdown(C, f"C5:C{MAXR}", f"=Agreements!$A$5:$A${4 + len(AGREEMENTS)}", "Agreement")
 COUNTRY_RANGE = f"Countries!$A$5:$A${MAXR}"
 
+# ======================= Tariff 2025 =======================
+import csv as _csv
+from pathlib import Path as _Path
+TARIFF_CSV = _Path(__file__).resolve().parents[1] / "data" / "tariff_2025.csv"
+with open(TARIFF_CSV, encoding="utf-8") as fh:
+    TARIFF = list(_csv.DictReader(fh))
+T = wb.create_sheet("Tariff 2025", 0)
+T["A1"] = "Tariff 2025: general import duty"; T["A1"].font = TITLE
+T["A2"] = ("General duty for each tariff line of Presidential Decree 218/2022 with its amendments, from the Customs "
+           "Encyclopedia of January 2025 (pages 30-495). The calculator uses it when an HS code is not on the Duty Rates "
+           "tab: the 8-digit line first, then the 6-digit line. It has no schedule tax, VAT exemptions, agreement rates "
+           "or conditions, and no changes after January 2025: for those, use customs.gov.eg and the Duty Rates tab. "
+           "Chapter 24 (tobacco) is not included. Don't edit: rebuilt from the encyclopedia.")
+T["A2"].font = NOTE
+header(T, 4, ["HS code (6 or 8 digits)", "General duty %", "Description (HS, English)", "Encyclopedia page", "Note"],
+       [13, 9, 90, 11, 16])
+for i, row in enumerate(TARIFF, 5):
+    vals = [row["code"], float(row["duty_pct"]), row["description_en"], int(row["page"]), row["note"]]
+    for c, v in enumerate(vals, 1):
+        cell = T.cell(row=i, column=c, value=v)
+        cell.font = B
+        if c == 1:
+            cell.number_format = "@"
+T_LAST = 4 + len(TARIFF)
+T.auto_filter.ref = f"A4:E{T_LAST}"
+T_CODE = f"'Tariff 2025'!$A$5:$A${T_LAST}"
+T_RATE = f"'Tariff 2025'!$B$5:$B${T_LAST}"
+T_DESC = f"'Tariff 2025'!$C$5:$C${T_LAST}"
+
 # ======================= Duty Rates =======================
 R = wb.create_sheet("Duty Rates", 0)
 R["A1"] = "Duty rates by HS code"; R["A1"].font = TITLE
@@ -359,63 +388,79 @@ hs_rng = f"'Duty Rates'!$B$5:$B${MAXR}"
 def duty(col):
     return f"'Duty Rates'!${col}$5:${col}${MAXR}"
 K["B20"] = "Customs value and duties"; K["B20"].font = BB
+SRC_DR, SRC_T8, SRC_T6 = "Duty Rates tab", "Tariff 2025, 8-digit line", "Tariff 2025, 6-digit line"
+t8 = f"MATCH(LEFT(C8,8),{T_CODE},0)"
+t6 = f"MATCH(LEFT(C8,6),{T_CODE},0)"
+on_dr = f"MATCH(C8,{hs_rng},0)"
 out = [
     (21, "HS chapter", "=LEFT(C8,2)", None, ""),
-    (22, "Description", f'=IFERROR(INDEX({duty("C")},MATCH(C8,{hs_rng},0)),"HS code not on the Duty Rates tab")', None, ""),
-    (23, "Agreement for this origin", f'=IFERROR(INDEX(Countries!$C$5:$C${MAXR},MATCH(C9,{COUNTRY_RANGE},0))&"","")', None,
+    (22, "Description",
+     f'=IFERROR(INDEX({duty("C")},{on_dr}),IFERROR(INDEX({T_DESC},{t8}),IFERROR(INDEX({T_DESC},{t6}),'
+     f'"HS code not found")))', None, ""),
+    (23, "Rate source",
+     f'=IF(ISNUMBER({on_dr}),"{SRC_DR}",IF(ISNUMBER({t8}),"{SRC_T8}",IF(ISNUMBER({t6}),"{SRC_T6}","Not found")))',
+     None, "Duty Rates tab first; otherwise the general rate from the Tariff 2025 tab"),
+    (24, "Agreement for this origin", f'=IFERROR(INDEX(Countries!$C$5:$C${MAXR},MATCH(C9,{COUNTRY_RANGE},0))&"","")', None,
      "From the Countries tab"),
-    (24, "Agreement rate (if any) %",
-     f'=IF(OR(C23="",C10<>"Yes"),"",IFERROR(INDEX(\'Duty Rates\'!${AG_FIRST}$5:${AG_LAST}${MAXR},MATCH(C8,{hs_rng},0),'
-     f'MATCH(C23&" %",\'Duty Rates\'!${AG_FIRST}$4:${AG_LAST}$4,0))&"",""))', None,
-     "Blank: no preferential rate on the Duty Rates tab, or no certificate"),
-    (25, "Duty rate used %", f'=IF(C24<>"",VALUE(C24),IFERROR(INDEX({duty("D")},MATCH(C8,{hs_rng},0)),NA()))', "0.0",
+    (25, "Agreement rate (if any) %",
+     f'=IF(OR(C24="",C10<>"Yes"),"",IFERROR(INDEX(\'Duty Rates\'!${AG_FIRST}$5:${AG_LAST}${MAXR},{on_dr},'
+     f'MATCH(C24&" %",\'Duty Rates\'!${AG_FIRST}$4:${AG_LAST}$4,0))&"",""))', None,
+     "Only from the Duty Rates tab: blank if no rate there, or no certificate"),
+    (26, "Duty rate used %",
+     f'=IF(C25<>"",VALUE(C25),IF(C23="{SRC_DR}",INDEX({duty("D")},{on_dr}),IF(C23="{SRC_T8}",INDEX({T_RATE},{t8}),'
+     f'IF(C23="{SRC_T6}",INDEX({T_RATE},{t6}),""))))', "0.0",
      "Agreement rate with a certificate, otherwise the general rate"),
-    (26, "CIF value (USD)", "=C11+C12+C13", "#,##0.00", "Invoice + freight + insurance"),
-    (27, "Customs duty (USD)", "=C26*C25/100", "#,##0.00", ""),
-    (28, "Schedule tax %", f'=IFERROR(INDEX({duty("E")},MATCH(C8,{hs_rng},0)),"")', "0.0",
-     "Blank when the HS code has none"),
-    (29, "Schedule tax (USD)", '=IF(N(C28)=0,0,(C26+C27)*C28/100)', "#,##0.00", "On CIF value + duty"),
-    (30, "VAT rate %", f'=IFERROR(INDEX({duty("F")},MATCH(C8,{hs_rng},0)),NA())', "0.0", ""),
-    (31, "VAT (USD)", "=(C26+C27)*C30/100", "#,##0.00", "On CIF value + duty, as the tariff states"),
-    (32, "Duties at clearance for this purpose", '=IFERROR(INDEX(Purposes!$D$5:$D$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")',
+    (27, "CIF value (USD)", "=C11+C12+C13", "#,##0.00", "Invoice + freight + insurance"),
+    (28, "Customs duty (USD)", '=IF(C26="","",C27*C26/100)', "#,##0.00", "Blank when the HS code is not found"),
+    (29, "Schedule tax %", f'=IF(C23="{SRC_DR}",IFERROR(INDEX({duty("E")},{on_dr}),""),"")', "0.0",
+     "Known only for codes on the Duty Rates tab"),
+    (30, "Schedule tax (USD)", '=IF(OR(C26="",N(C29)=0),0,(C27+C28)*C29/100)', "#,##0.00", "On CIF value + duty"),
+    (31, "VAT rate %", f'=IF(C23="{SRC_DR}",INDEX({duty("F")},{on_dr}),14)', "0.0",
+     "Duty Rates tab; otherwise the general 14%"),
+    (32, "VAT (USD)", '=IF(C26="","",(C27+C28)*C31/100)', "#,##0.00", "On CIF value + duty, as the tariff states"),
+    (33, "Duties at clearance for this purpose", '=IFERROR(INDEX(Purposes!$D$5:$D$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")',
      None, "From the Purposes tab"),
-    (33, "Duty and taxes to pay (USD)", '=IF(C32="Yes",C27+C29+C31,0)', "#,##0.00", "Duty + schedule tax + VAT"),
-    (34, "Duty and taxes under guarantee (USD)", '=IF(C32="Guarantee",C27+C29+C31,0)', "#,##0.00",
+    (34, "Duty and taxes to pay (USD)", '=IF(C26="","",IF(C33="Yes",C28+C30+C32,0))', "#,##0.00",
+     "Duty + schedule tax + VAT"),
+    (35, "Duty and taxes under guarantee (USD)", '=IF(C26="","",IF(C33="Guarantee",C28+C30+C32,0))', "#,##0.00",
      "Suspended, but the guarantee must cover it"),
-    (35, "Tariff notes", f'=IFERROR(INDEX({duty(NOTES)},MATCH(C8,{hs_rng},0))&"","")', None,
+    (36, "Tariff notes",
+     f'=IF(C23="{SRC_DR}",IFERROR(INDEX({duty(NOTES)},{on_dr})&"",""),IF(C23="Not found","Add this HS code to the Duty '
+     f'Rates tab from customs.gov.eg","General rate only. Check customs.gov.eg for a schedule tax, VAT exemption, '
+     f'agreement rate and conditions, then add the code to the Duty Rates tab."))', None,
      "Other fees and conditions the estimate does not include"),
 ]
 for r, label, f, fmt, note in out:
     K.cell(row=r, column=2, value=label).font = B
     cell = K.cell(row=r, column=3, value=f)
     cell.font, cell.border = B, GRID
-    if r == 35:
+    if r in (22, 36):
         cell.alignment = WRAP
-        K.row_dimensions[r].height = 54
+        K.row_dimensions[r].height = 54 if r == 36 else 40
     if fmt:
         cell.number_format = fmt
     if note:
         K.cell(row=r, column=4, value=note).font = NOTE
-K["B37"] = "Clearance fees and total"; K["B37"].font = BB
+K["B38"] = "Clearance fees and total"; K["B38"].font = BB
 tot = [
-    (38, "Clearance fees (USD)", f"=SUM('Clearance Fees'!$V$5:$V${MAXR})", "From the Clearance Fees rows that apply"),
-    (39, "Fee rows used", f"=SUM('Clearance Fees'!$U$5:$U${MAXR})", "0 means no fee row matches this shipment"),
-    (40, "Total to pay (USD)", "=C33+C38", "Duty and taxes to pay + clearance fees"),
-    (41, "Total to pay (EGP)", "=C40*C16", ""),
+    (39, "Clearance fees (USD)", f"=SUM('Clearance Fees'!$V$5:$V${MAXR})", "From the Clearance Fees rows that apply"),
+    (40, "Fee rows used", f"=SUM('Clearance Fees'!$U$5:$U${MAXR})", "0 means no fee row matches this shipment"),
+    (41, "Total to pay (USD)", '=IF(C34="","",C34+C39)', "Duty and taxes to pay + clearance fees"),
+    (42, "Total to pay (EGP)", '=IF(C41="","",C41*C16)', ""),
 ]
 for r, label, f, note in tot:
-    K.cell(row=r, column=2, value=label).font = BB if r in (40, 41) else B
+    K.cell(row=r, column=2, value=label).font = BB if r in (41, 42) else B
     cell = K.cell(row=r, column=3, value=f)
-    cell.font, cell.border = (BB if r in (40, 41) else B), GRID
-    cell.number_format = "0" if r == 39 else "#,##0.00"
+    cell.font, cell.border = (BB if r in (41, 42) else B), GRID
+    cell.number_format = "0" if r == 40 else "#,##0.00"
     if note:
         K.cell(row=r, column=4, value=note).font = NOTE
-K["B43"] = "Documents to ask the client for"; K["B43"].font = BB
-K["C43"] = (f'=IFERROR(INDEX(Purposes!$E$5:$E$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")'
-            f'&IF(C24<>"",";"&IFERROR(INDEX(Agreements!$D$5:$D$30,MATCH(C23,Agreements!$A$5:$A$30,0)),""),"")'
-            f'&IFERROR(IF(INDEX({duty(CTRL)},MATCH(C8,{hs_rng},0))&""="","",";"&INDEX({duty(CTRL)},MATCH(C8,{hs_rng},0))),"")')
-K["C43"].font, K["C43"].alignment = B, WRAP
-K["D43"] = "Codes are explained on the Documents tab"; K["D43"].font = NOTE
+K["B44"] = "Documents to ask the client for"; K["B44"].font = BB
+K["C44"] = (f'=IFERROR(INDEX(Purposes!$E$5:$E$20,MATCH(C7,Purposes!$A$5:$A$20,0)),"")'
+            f'&IF(C25<>"",";"&IFERROR(INDEX(Agreements!$D$5:$D$30,MATCH(C24,Agreements!$A$5:$A$30,0)),""),"")'
+            f'&IFERROR(IF(INDEX({duty(CTRL)},{on_dr})&""="","",";"&INDEX({duty(CTRL)},{on_dr})),"")')
+K["C44"].font, K["C44"].alignment = B, WRAP
+K["D44"] = "Codes are explained on the Documents tab"; K["D44"].font = NOTE
 K.freeze_panes = "A4"
 
 # ======================= Read me =======================
@@ -441,7 +486,11 @@ sections = [
      "documents."),
     ("Clearance Fees", "Fill in: your clearance prices, one fee per row. Imported by the app."),
     ("Duty Rates", "Fill in: duty, schedule tax, VAT and agreement rates for the HS codes MTS handles, from "
-     "customs.gov.eg/Services/Tarif. Three lines are filled in from the tariff as a model."),
+     "customs.gov.eg/Services/Tarif. Three lines are filled in from the tariff as a model. Codes not listed here "
+     "fall back to the Tariff 2025 tab."),
+    ("Tariff 2025", "Reference, don't edit: the general duty for about 6,000 tariff lines (Decree 218/2022 with "
+     "amendments, Customs Encyclopedia January 2025). General rate only: add a code to Duty Rates when it has a "
+     "schedule tax, VAT exemption, agreement rate or condition, or when its rate has changed."),
     ("Countries", "Check: which agreement applies to each country of origin."),
     ("Agreements", "Check: agreement names, partners and certificates."),
     ("Purposes", "Check: duty treatment and documents for each purpose."),
@@ -478,7 +527,8 @@ sections = [
     ("Colours", "Grey rows are examples. Yellow cells on the Calculator are inputs. Grey columns on Clearance Fees are "
      "the calculator's: don't edit them."),
     ("Sources", "Cost structure: gomruky.com/customs/clearance-costs (Aug 2026), sino-shipping.com import duties and "
-     "taxes guide (Mar 2026). Official tariff: customs.gov.eg/Services/Tarif (checked 5 Nov 2026). Agreements: trade.gov Egypt country "
+     "taxes guide (Mar 2026). Official tariff: customs.gov.eg/Services/Tarif (checked 5 Nov 2026). General rates: "
+     "Customs Encyclopedia (الموسوعة الجمركية), January 2025, matched against customs.gov.eg on a sample. Agreements: trade.gov Egypt country "
      "guide (Nov 2025)."),
 ]
 r = 4
